@@ -1,0 +1,454 @@
+/* BloSke (ブロスケ) 共通スタイルシート */
+/* * デザインテーマ: ポップで親しみやすさを持ちつつ、スマートで直感的。
+ * メインカラー (仮): 青系 (Tailwind Blue 500: #3B82F6)
+ */
+
+:root {
+    --main-color: #3B82F6;
+    --main-color-dark: #2563EB;
+    --background-color: #f8f9fa; /* 明るいグレー */
+    --text-color: #333;
+    --header-height: 60px;
+    --footer-height: 50px;
+}
+
+/* --- 基本スタイル --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    margin: 0;
+    padding: 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex-grow: 1;
+    padding-top: var(--header-height); /* ヘッダー分を空ける */
+    padding-bottom: var(--footer-height); /* フッター分を空ける */
+    width: 100%;
+    box-sizing: border-box; /* paddingを含めて計算 */
+}
+
+/* --- ヘッダー --- */
+header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #dee2e6;
+    height: var(--header-height);
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+header .app-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--main-color);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* --- フッター --- */
+footer {
+    background-color: #343a40;
+    color: #f8f9fa;
+    height: var(--footer-height);
+    width: 100%;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8rem;
+    z-index: 1000;
+}
+
+/* --- ハンバーガーメニュー --- */
+#hamburger-icon {
+    width: 30px;
+    height: 25px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    cursor: pointer;
+    z-index: 1003;
+}
+
+#hamburger-icon div {
+    width: 100%;
+    height: 3px;
+    background-color: #333;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+/* ハンバーガーメニュー (X印) */
+#hamburger-icon.open div:nth-child(1) {
+    transform: translateY(11px) rotate(-45deg);
+}
+#hamburger-icon.open div:nth-child(2) {
+    opacity: 0;
+}
+#hamburger-icon.open div:nth-child(3) {
+    transform: translateY(-11px) rotate(45deg);
+}
+
+/* メニュー本体 (右からスライド) */
+#side-menu {
+    position: fixed;
+    top: 0;
+    right: -280px; /* 初期状態 (隠れている) */
+    width: 280px;
+    height: 100%;
+    background-color: #ffffff;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease-in-out;
+    z-index: 1002;
+    padding-top: var(--header-height);
+    box-sizing: border-box;
+}
+
+#side-menu.open {
+    transform: translateX(-280px);
+}
+
+#side-menu nav {
+    padding: 20px;
+}
+
+#side-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#side-menu li {
+    margin-bottom: 5px;
+}
+
+#side-menu li a {
+    display: block;
+    padding: 12px 15px;
+    text-decoration: none;
+    color: var(--text-color);
+    font-size: 1.1rem;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+
+#side-menu li a:hover {
+    background-color: #f1f3f5;
+}
+
+#side-menu .menu-divider {
+    height: 1px;
+    background-color: #e9ecef;
+    margin: 15px 0;
+}
+
+#side-menu .menu-sub-link {
+    font-size: 0.9rem;
+    color: #868e96;
+    padding-left: 30px; /* 1段下げ */
+}
+
+#side-menu .menu-version {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    font-size: 0.8rem;
+    color: #adb5bd;
+}
+
+/* メニューオーバーレイ */
+#menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1001;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease-in-out;
+}
+
+#menu-overlay.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --- モーダル (ポップアップ) --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+
+.modal-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 450px;
+    box-sizing: border-box;
+    transform: scale(0.95);
+    transition: transform 0.3s ease;
+}
+
+.modal-overlay.show .modal-content {
+    transform: scale(1);
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px 15px;
+    font-size: 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--main-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end; /* 右寄せ */
+    gap: 10px;
+    margin-top: 30px;
+}
+
+/* --- 共通ボタン --- */
+.btn {
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+.btn-primary {
+    background-color: var(--main-color);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: var(--main-color-dark);
+}
+
+.btn-secondary {
+    background-color: #e9ecef;
+    color: #333;
+    border: 1px solid #ced4da;
+}
+.btn-secondary:hover {
+    background-color: #dee2e6;
+}
+
+/* --- コンテナ (中央配置) --- */
+.container {
+    padding: 30px 20px;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.text-center {
+    text-align: center;
+}
+
+/* --- edit.html 専用 --- */
+#edit-container {
+    padding: 20px;
+}
+
+.project-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    text-align: center;
+    margin-bottom: 20px;
+    cursor: pointer;
+    border: 2px dashed transparent;
+    padding: 5px;
+}
+.project-title:hover {
+    border-color: #ccc;
+}
+
+.button-field {
+    display: flex;
+    flex-wrap: wrap; /* スマホで折り返し */
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.button-field .btn {
+    font-size: 0.9rem; /* 少し小さく */
+    padding: 10px 15px;
+}
+
+/* アイコンフォント (Font Awesome) - common.jsで読み込む想定 */
+
+/* Canvas */
+#timetable-canvas-container {
+    width: 100%;
+    overflow-x: auto; /* 横スクロールを可能に */
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    min-height: 400px; /* 最小の高さを確保 */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+#timetableCanvas {
+    display: block;
+    /* JS側でサイズ制御 */
+}
+
+.canvas-options {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 15px;
+    padding-right: 10px;
+}
+
+.canvas-options label {
+    font-size: 0.9rem;
+    color: #555;
+    margin-left: 5px;
+    cursor: pointer;
+}
+
+/* --- guide.html / release-notes.html --- */
+.content-page {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin: 20px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.content-page h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--main-color);
+    border-bottom: 2px solid var(--main-color);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.content-page h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-top: 30px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.content-page p {
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 15px;
+}
+
+/* release-notes.html (marked.js) */
+.release-entry {
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+.release-entry:last-child {
+    border-bottom: none;
+}
+.release-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.release-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #333;
+}
+.release-date {
+    font-size: 0.9rem;
+    color: #868e96;
+}
+.release-body ul {
+    list-style-type: disc;
+    padding-left: 25px;
+}
