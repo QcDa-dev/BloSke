@@ -452,3 +452,48 @@ footer {
     list-style-type: disc;
     padding-left: 25px;
 }
+
+/* --- projects.html 専用 --- */
+.user-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #555;
+    background-color: #f1f3f5;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.project-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+
+.project-item:hover {
+    background-color: #f8f9fa;
+}
+
+.project-item span {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.project-item .btn-sm {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+}
