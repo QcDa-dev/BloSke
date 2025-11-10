@@ -5,7 +5,7 @@
  * @param {string} appName - ヘッダーに表示するアプリ名。
  * @param {string} contactUrl - お問い合わせページのURL。
  */
-function initCommonUI(appName = 'BloSke', contactUrl = '#') {
+function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog') {
     // --- Font Awesome (アイコン用) ---
     // 開発を容易にするため、Font Awesomeを動的に読み込みます。
     if (!document.querySelector('link[href*="font-awesome"]')) {
@@ -40,7 +40,7 @@ function initCommonUI(appName = 'BloSke', contactUrl = '#') {
             <nav>
                 <ul>
                     <li><a href="guide.html" target="_blank"><i class="fa-solid fa-book-open fa-fw"></i> 使い方ガイド</a></li>
-                    <li><a href="https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
+                    <li><a href="${contactUrl}" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
                     <li><a href="release-notes.html" target="_blank"><i class="fa-solid fa-bullhorn fa-fw"></i> リリースノート</a></li>
                 </ul>
                 <div class="menu-divider"></div>
