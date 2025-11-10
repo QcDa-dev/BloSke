@@ -17,12 +17,12 @@ const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxN0czK9zQ2uNLr-Avh
 
 // TODO: Firebase プロジェクトの設定に置き換えてください
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyD8rQk_RyvRovSqe7O3kFj7CKsumt1phyQ",
+  authDomain: "bloske-50c88.firebaseapp.com",
+  projectId: "bloske-50c88",
+  storageBucket: "bloske-50c88.firebasestorage.app",
+  messagingSenderId: "1034469680533",
+  appId: "1:1034469680533:web:6284cc681be762658b029c"
 };
 
 // --- Firebase 初期化 (グローバル変数) ---
