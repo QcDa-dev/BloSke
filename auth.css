@@ -1,0 +1,175 @@
+/* BloSke (ブロスケ) 認証画面 (login, register, forgot, reset) 専用スタイル */
+
+:root {
+    --main-color: #3B82F6;
+    --main-color-dark: #2563EB;
+    --background-color: #f8f9fa;
+    --text-color: #333;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    margin: 0;
+    padding: 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.auth-container {
+    background-color: #ffffff;
+    padding: 30px 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 400px;
+    box-sizing: border-box;
+}
+
+.auth-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--main-color);
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 30px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px 15px;
+    font-size: 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--main-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.btn {
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%; /* 認証フォームではボタン幅は100%を基本 */
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+.btn-primary {
+    background-color: var(--main-color);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: var(--main-color-dark);
+}
+
+.btn-secondary {
+    background-color: #e9ecef;
+    color: #333;
+    border: 1px solid #ced4da;
+}
+.btn-secondary:hover {
+    background-color: #dee2e6;
+}
+
+.btn-google {
+    background-color: #ffffff;
+    color: #444;
+    border: 1px solid #ced4da;
+    font-weight: 500;
+}
+.btn-google:hover {
+    background-color: #f8f9fa;
+}
+.btn-google img {
+    width: 20px;
+    height: 20px;
+}
+
+.auth-divider {
+    font-size: 0.9rem;
+    color: #868e96;
+    text-align: center;
+    margin: 25px 0;
+    position: relative;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 35%;
+    height: 1px;
+    background-color: #dee2e6;
+}
+.auth-divider::before { left: 0; }
+.auth-divider::after { right: 0; }
+
+
+.auth-links {
+    margin-top: 25px;
+    text-align: center;
+}
+
+.auth-links a {
+    font-size: 0.9rem;
+    color: var(--main-color);
+    text-decoration: none;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.auth-links a:hover {
+    text-decoration: underline;
+}
+
+.checkbox-group {
+    margin-bottom: 20px;
+}
+.checkbox-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.checkbox-group input {
+    margin-right: 8px;
+}
+
+.form-note {
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 20px;
+}
