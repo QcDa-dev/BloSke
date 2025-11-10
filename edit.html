@@ -16,95 +16,14 @@
     <!-- このページ専用のスタイル -->
     <style>
         /* カレンダーピッカーやカラーピッカーのスタイルをここに追加（将来的に） */
-    </style>
-</head>
-<body>
-
-    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
-
-    <main>
-        <div id="edit-container">
-            <!-- プロジェクト名 (仕様書 3.2.2) -->
-            <h1 id="project-title" class="project-title" title="クリックして編集">読み込み中...</h1>
-
-            <!-- ボタンフィールド (仕様書 3.2.2) -->
-            <div class="button-field">
-                <button id="add-block-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> ブロック追加</button>
-                <button id="edit-mode-btn" class="btn btn-secondary"><i class="fa-solid fa-pen-to-square"></i> 編集モード</button>
-                <button id="toggle-view-btn" class="btn btn-secondary"><i class="fa-solid fa-right-left"></i> 縦横表示</button>
-                <button id="save-btn" class="btn btn-secondary"><i class="fa-solid fa-save"></i> 保存</button>
-                <button id="export-img-btn" class="btn btn-secondary"><i class="fa-solid fa-image"></i> 画像出力</button>
-                <button id="reset-btn" class="btn btn-secondary" style="color: #DC3545; border-color: #DC3545;"><i class="fa-solid fa-trash-arrow-up"></i> リセット</button>
-            </div>
-
-            <!-- タイムテーブルフィールド (仕様書 3.2.2) -->
-            <div id="timetable-canvas-container">
-                <canvas id="timetableCanvas" width="1000" height="400">
-                    お使いのブラウザはCanvasをサポートしていません。
-                </canvas>
-            </div>
-
-            <!-- オプション (仕様書 3.2.2) -->
-            <div class="canvas-options">
-                <input type="checkbox" id="two-column-toggle">
-                <label for="two-column-toggle">2段組表示</label>
-            </div>
-        </div>
-    </main>
-
-    <!-- ブロック情報編集ウィンドウ (モーダル) (仕様書 3.2.2) -->
-    <div id="block-edit-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2 id="block-modal-title" class="modal-title">ブロック情報編集</h2>
-            <div class="form-group">
-                <label for="block-name">ブロック名</label>
-                <input type="text" id="block-name" class="form-input" placeholder="会議A">
-            </div>
-            <div class="form-group">
-                <label for="block-start">開始</label>
-                <!-- TODO: 将来的に日付ピッカー + 時刻ピッカーに置き換え -->
-                <input type="datetime-local" id="block-start" class="form-input">
-            </div>
-            <div class="form-group">
-                <label for="block-end">終了</label>
-                <input type="datetime-local" id="block-end" class="form-input">
-            </div>
-            <div class="form-group">
-                <label>カラー</label>
-                <!-- TODO: 将来的にカラーピッカーに置き換え -->
-                <input type="color" id="block-color" class="form-input" value="#3B82F6">
-            </div>
-            <div class="modal-actions">
-                <button id="block-edit-cancel-btn" class="btn btn-secondary">キャンセル</button>
-                <button id="block-edit-confirm-btn" class="btn btn-primary">決定</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 削除確認モーダル (仕様書 3.2.2) -->
-    <div id="delete-confirm-modal" class="modal-overlay">
-         <div class="modal-content">
-            <h2 class="modal-title">削除確認</h2>
-            <p class="text-center">本当にこのブロックを削除しますか？</p>
-            <div class="modal-actions">
-                <button id="delete-cancel-btn" class="btn btn-secondary">キャンセル</button>
-                <button id="delete-confirm-btn" class="btn btn-primary" style="background-color: #DC3545;">はい、削除します</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- リセット確認モーダル (仕様書 3.2.2) -->
-    <div id="reset-confirm-modal" class="modal-overlay">
-         <div class="modal-content">
-            <h2 class="modal-title">リセット確認</h2>
-            <p class="text-center">プロジェクトをリセットし、すべてのブロックを削除します。この操作は取り消せません。よろしいですか？</p>
-            <div class="modal-actions">
-                <button id="reset-cancel-btn" class="btn btn-secondary">キャンセル</button>
-                <button id="reset-confirm-btn" class="btn btn-primary" style="background-color: #DC3545;">はい、リセットします</button>
-            </div>
+/* ... existing code ... -->
         </div>
     </div>
 
+
+    <!-- Firebase SDK (互換性バージョン) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 
     <!-- 共通スクリプト -->
     <script src="common.js"></script>
@@ -116,7 +35,12 @@
             const projectTitleEl = document.getElementById('project-title');
             const canvas = document.getElementById('timetableCanvas');
             const ctx = canvas.getContext('2d');
-
+            
+            // --- グローバル変数 ---
+            let currentUser = null;
+            let currentProjectName = '無題のプロジェクト';
+            let blocks = []; // タイムテーブルのブロックデータ
+            
             // --- Canvas描画 (空の状態) ---
             function drawEmptyCanvas() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -129,6 +53,44 @@
                 ctx.restore();
             }
 
+            /**
+             * CSVデータをブロックの配列に変換 (簡易パース)
+             * 仕様書 6.1 の形式を想定: ブロック名,開始日時ISO,終了日時ISO,カラーコード
+             */
+            function parseCsvToBlocks(csvData) {
+                if (!csvData) return [];
+                const parsedBlocks = [];
+                const lines = csvData.split('\n');
+                
+                // 1行目 (ヘッダー) をスキップ
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    const parts = line.split(',');
+                    if (parts.length >= 4) {
+                        parsedBlocks.push({
+                            name: parts[0],
+                            start: parts[1], // ISO文字列
+                            end: parts[2],   // ISO文字列
+                            color: parts[3]
+                        });
+                    }
+                }
+                return parsedBlocks;
+            }
+            
+            /**
+             * ブロックデータをCSV文字列に変換
+             */
+            function convertBlocksToCsv(blocksArray) {
+                let csv = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; // ヘッダー
+                blocksArray.forEach(block => {
+                    csv += `${block.name},${block.start},${block.end},${block.color}\n`;
+                });
+                return csv;
+            }
+
             // --- プロジェクト読み込み ---
             function loadProject() {
                 try {
@@ -139,17 +101,39 @@
                         // 新規作成
                         const projectName = sessionStorage.getItem('bloSkeCurrentProjectName') || '新規プロジェクト';
                         projectTitleEl.textContent = projectName;
+                        currentProjectName = projectName; // 内部変数に保持
                         sessionStorage.removeItem('bloSkeIsNewProject'); // フラグ削除
                         localStorage.removeItem('bloSkeDraft'); // 古いドラフトを消す
+                        blocks = []; // ブロックを初期化
                         drawEmptyCanvas();
                     } else if (localData) {
                         // ローカル保存からの復元
                         console.log('ローカルデータを復元します。');
                         const data = JSON.parse(localData);
                         projectTitleEl.textContent = data.projectName || '無題のプロジェクト';
-                        // TODO: data.blocks を使ってCanvasを描画するロジック
-                        // 現時点では空表示
-                        drawEmptyCanvas();
+                        currentProjectName = data.projectName || '無題のプロジェクト'; // 内部変数に保持
+                        
+                        // projects.htmlから読み込んだデータ形式 (JSON)
+                        if (data.blocks) {
+                            blocks = data.blocks;
+                        } 
+                        // edit.htmlで自動保存されたデータ形式 (CSV)
+                        else if (data.csvData) { 
+                            blocks = parseCsvToBlocks(data.csvData);
+                        } 
+                        else {
+                            blocks = [];
+                        }
+                        
+                        console.log('復元したブロック:', blocks);
+                        
+                        // TODO: blocks を使ってCanvasを描画するロジック
+                        if (blocks.length === 0) {
+                            drawEmptyCanvas();
+                        } else {
+                            // TODO: 描画関数呼び出し
+                            drawEmptyCanvas(); // 仮
+                        }
                     } else {
                         // ローカルデータなし (index.htmlから直接来たなど)
                         alert('プロジェクト情報が見つかりません。メイン画面に戻ります。');
@@ -158,16 +142,33 @@
                     }
 
                 } catch (e) {
-                    console.error('プロジェクトの読み込みに失敗しました。', e);
-                    projectTitleEl.textContent = '読み込みエラー';
+                    blocks = [];
                     drawEmptyCanvas();
                 }
             }
             
+            // --- 自動保存 (仕様書 3.2.1) ---
+            function autoSaveToLocal() {
+                try {
+                    const csvData = convertBlocksToCsv(blocks);
+                    const dataToSave = {
+                        projectName: currentProjectName,
+                        csvData: csvData // ローカル保存はCSV形式に統一
+                    };
+                    localStorage.setItem('bloSkeDraft', JSON.stringify(dataToSave));
+                    console.log('ローカルに自動保存しました。');
+                } catch (e) {
+                    console.error('ローカルへの自動保存に失敗しました。', e);
+                }
+            }
+
             // --- 初期化 ---
+            currentUser = getUserSession(); // ログイン状態を取得
             loadProject();
-
-
+            
+            // TODO: ブロックが変更されるたびに autoSaveToLocal() を呼び出す
+            // (例: ブロック追加、編集、削除、ドラッグ＆ドロップ後)
+            
             // --- モーダル設定 ---
             // ブロック追加モーダル
             document.getElementById('add-block-btn').addEventListener('click', () => {
@@ -183,6 +184,48 @@
             });
             setupModalClose('reset-confirm-modal', ['reset-cancel-btn']);
             
+            // --- ボタンイベントリスナー ---
+            
+            // プロジェクト名編集 (仕様書 3.2.2)
+            projectTitleEl.addEventListener('click', () => {
+                const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
+                if (newName && newName.trim() !== '') {
+                    currentProjectName = newName.trim();
+                    projectTitleEl.textContent = currentProjectName;
+                    autoSaveToLocal(); // 名前変更を自動保存
+                }
+            });
+
+            // 保存 (仕様書 3.2.2 / 4.3)
+            document.getElementById('save-btn').addEventListener('click', async () => {
+                if (!currentUser) {
+                    // 未ログイン時
+                    alert('プロジェクトを保存するにはログインが必要です。\nログイン画面に移動します。');
+                    // TODO: ログイン後、このページに戻って保存を再開するロジック (sessionStorageにフラグ)
+                    sessionStorage.setItem('bloSkeRedirectToSave', 'true');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                // ログイン時
+                try {
+                    const csvData = convertBlocksToCsv(blocks);
+                    const data = await callGasApi('saveProject', {
+                        username: currentUser.username,
+                        projectName: currentProjectName,
+                        csvData: csvData
+                    });
+                    alert(data.message || 'プロジェクトを保存しました。');
+                    
+                    // ローカルのドラフトは削除しても良い (サーバー保存が正となるため)
+                    // localStorage.removeItem('bloSkeDraft'); 
+                    
+                } catch (error) {
+                    console.error('プロジェクトの保存に失敗:', error);
+                }
+            });
+
+
             // TODO: 削除確認モーダル (編集モード時に動的に設定)
             // setupModalClose('delete-confirm-modal', ['delete-cancel-btn']);
 
@@ -195,12 +238,18 @@
                 canvas.height = 400; 
                 
                 // 再描画
-                drawEmptyCanvas(); // TODO: 実際の描画関数を呼ぶ
+                // TODO: 実際の描画関数を呼ぶ
+                if (blocks.length === 0) {
+                    drawEmptyCanvas();
+                } else {
+                    // drawAllBlocks(); 
+                    drawEmptyCanvas(); // 仮
+                }
             }
             
             // ウィンドウリサイズ時にCanvasもリサイズ
             window.addEventListener('resize', resizeCanvas);
-            // resizeCanvas(); // 初期描画
+            resizeCanvas(); // 初期描画
         });
     </script>
 </body>
