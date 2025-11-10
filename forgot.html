@@ -51,8 +51,34 @@
         </div>
     </div>
     
+    <!-- 共通スクリプト (API連携) -->
+    <script src="common.js"></script>
     <script>
-        // TODO: 再設定メール送信ロジック (API連携)
+        document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const resetType = document.querySelector('input[name="resetType"]:checked');
+            
+            if (!resetType) {
+                alert('リセット対象を選択してください。');
+                return;
+            }
+
+            try {
+                const data = await callGasApi('sendResetEmail', {
+                    email: email,
+                    resetType: resetType.value
+                });
+                
+                alert(data.message || 'メールを送信しました。');
+                // 成功したらログイン画面に戻る
+                window.location.href = 'login.html';
+
+            } catch (error) {
+                console.error('リセットメール送信失敗:', error);
+            }
+        });
     </script>
 </body>
 </html>
