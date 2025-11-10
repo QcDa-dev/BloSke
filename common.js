@@ -74,7 +74,7 @@ function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/
             <nav>
                 <ul>
                     <li><a href="guide.html" target="_blank"><i class="fa-solid fa-book-open fa-fw"></i> 使い方ガイド</a></li>
-                    <li><a href="https://forms.gle/XuzBvktEayWMG2po6" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
+                    <li><a href="https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
                     <li><a href="release-notes.html" target="_blank"><i class="fa-solid fa-bullhorn fa-fw"></i> リリースノート</a></li>
                 </ul>
                 <div class="menu-divider"></div>
