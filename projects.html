@@ -50,6 +50,10 @@
         </div>
     </main>
 
+    <!-- Firebase SDK (互換性バージョン) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
     <!-- 共通スクリプト -->
     <script src="common.js"></script>
     <script>
@@ -63,33 +67,18 @@
             const noProjectsMessage = document.getElementById('no-projects-message');
 
             // --- ログイン状態の確認 ---
-            // TODO: 本来はFirebase AuthやSessionStorageからユーザー情報を取得
-            const mockUser = { username: 'TestUser' }; // ダミー
+            const currentUser = authGuard(true); // 認証チェック＆リダイレクト
+            if (!currentUser) return; // authGuardがリダイレクトする
             
-            if (mockUser) {
-                usernameDisplay.textContent = `${mockUser.username} さんのプロジェクト`;
-                // プロジェクト一覧を取得
-                fetchProjects(mockUser.username);
-            } else {
-                // 未ログインの場合、login.htmlへリダイレクト (仕様書 3.2.7)
-                // alert('ログインが必要です。');
-                // window.location.href = 'login.html';
-                
-                // ダミー表示
-                usernameDisplay.textContent = `ログインしていません`;
-                loadingIndicator.style.display = 'none';
-                noProjectsMessage.classList.remove('hidden');
-            }
+            usernameDisplay.textContent = `${currentUser.username} さんのプロジェクト`;
+            fetchProjects(currentUser.username);
 
-            // --- プロジェクト一覧の取得 (ダミー) ---
-            function fetchProjects(username) {
-                // TODO: listProjects APIを呼び出す
-                console.log(`API call: listProjects (user: ${username})`);
-                
-                // ダミーデータによるシミュレーション
-                setTimeout(() => {
-                    const mockProjects = ['プロジェクトA', '旅行計画2025', '会議タイムテーブル'];
-                    // const mockProjects = []; // データがない場合のテスト
+
+            // --- プロジェクト一覧の取得 (仕様書 4.3) ---
+            async function fetchProjects(username) {
+                try {
+                    const data = await callGasApi('listProjects', { username: username });
+                    const mockProjects = data.projects || [];
                     
                     loadingIndicator.style.display = 'none';
                     
@@ -116,18 +105,72 @@
                         listContainer.appendChild(item);
                     });
 
-                }, 1000);
+                } catch (error) {
+                    loadingIndicator.style.display = 'none';
+                    noProjectsMessage.textContent = 'プロジェクトの読み込みに失敗しました。';
+                    noProjectsMessage.classList.remove('hidden');
+                    console.error('プロジェクト一覧の取得失敗:', error);
+                }
             }
 
-            // --- プロジェクト読み込み (ダミー) ---
-            function loadProjectData(username, projectName) {
-                // TODO: loadProject APIを呼び出す
-                console.log(`API call: loadProject (user: ${username}, project: ${projectName})`);
-                alert(`（ダミー）「${projectName}」を読み込みます。`);
+            // --- プロジェクト読み込み (仕様書 4.3) ---
+            async function loadProjectData(username, projectName) {
+                try {
+                    const data = await callGasApi('loadProject', { 
+                        username: username, 
+                        projectName: projectName 
+                    });
+                    
+                    // 取得したCSVデータをlocalStorageに保存し、edit.htmlに遷移
+                    // 注意: localStorageは容量制限があるため、大きなデータは不向き。
+                    // 仕様書 3.2.1 に従い、ローカル保存(localStorage)を使用する。
+                    
+                    // CSVデータをパースしてJSON形式に変換（仮）
+                    // TODO: 実際のCSVパースロジックを実装
+                    const blocks = parseCsvToBlocks(data.csvData); 
+                    
+                    const projectData = {
+                        projectName: projectName,
+                        blocks: blocks 
+                    };
+                    
+                    localStorage.setItem('bloSkeDraft', JSON.stringify(projectData));
+                    // 新規作成フラグは立てない (ローカルデータを読み込むため)
+                    sessionStorage.removeItem('bloSkeIsNewProject');
+                    
+                    window.location.href = 'edit.html';
+
+                } catch (error) {
+                    console.error('プロジェクトの読み込みに失敗:', error);
+                }
+            }
+
+            /**
+             * CSVデータをブロックの配列に変換 (簡易パース)
+             * 仕様書 6.1 の形式を想定: ブロック名,開始日時ISO,終了日時ISO,カラーコード
+             */
+            function parseCsvToBlocks(csvData) {
+                if (!csvData) return [];
+                const blocks = [];
+                const lines = csvData.split('\n');
                 
-                // TODO: 取得したCSVデータをlocalStorageに保存し、edit.htmlに遷移
-                // localStorage.setItem('bloSkeDraft', JSON.stringify({ projectName: projectName, blocks: ... }));
-                // window.location.href = 'edit.html';
+                // 1行目 (ヘッダー) をスキップ
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    const parts = line.split(',');
+                    if (parts.length >= 4) {
+                        blocks.push({
+                            name: parts[0],
+                            start: parts[1],
+                            end: parts[2],
+                            color: parts[3]
+                            // TODO: Canvas描画に必要な他のプロパティも追加
+                        });
+                    }
+                }
+                return blocks;
             }
         });
     </script>
