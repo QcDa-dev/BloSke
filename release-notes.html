@@ -41,12 +41,12 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // 共通UIの初期化
-            initCommonUI('BloSke', 'https://example.com/contact'); // TODO: お問い合わせURLを置き換えてください
+            initCommonUI('BloSke'); 
 
             // --- GitHub Releases 取得 ---
             // TODO: ユーザー確認後、'YOUR_REPO_NAME' を正しいリポジトリ名 (例: 'BloSke') に置き換えてください。
             const GITHUB_USER = 'qcda-dev';
-            const GITHUB_REPO = 'BloSke'; // (仮) ユーザー確認待ち
+            const GITHUB_REPO = 'BloSke'; 
             
             const API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases`;
 
