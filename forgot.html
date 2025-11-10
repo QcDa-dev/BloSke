@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID/パスワード再設定 - BloSke</title>
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    
+    <link rel="stylesheet" href="auth.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    
+    <div class="auth-container">
+        <h1 class="auth-title">ID/パスワード再設定</h1>
+        
+        <p class="form-note">
+            登録済みのメールアドレスを入力し、リセットしたい項目を選択してください。再設定用のメールを送信します。
+        </p>
+
+        <form id="forgot-form">
+            <div class="form-group">
+                <label for="email">メールアドレス</label>
+                <input type="email" id="email" class="form-input" required>
+            </div>
+            
+            <div class="form-group checkbox-group">
+                <label style="font-weight: 600; color: #555; margin-bottom: 15px;">リセット対象</label>
+                <label>
+                    <input type="radio" name="resetType" value="id_reset" required> IDをリセット
+                </label>
+                <label>
+                    <input type="radio" name="resetType" value="password_reset"> パスワードをリセット
+                </label>
+                <label>
+                    <input type="radio" name="resetType" value="id_password_reset"> IDとパスワード両方をリセット
+                </label>
+            </div>
+            
+            <button type="submit" id="send-reset-mail-btn" class="btn btn-primary" style="margin-top: 10px;">
+                <i class="fa-solid fa-paper-plane"></i> リセットメールを送信
+            </button>
+        </form>
+        
+        <div class="auth-links">
+            <a href="login.html">ログイン画面に戻る</a>
+        </div>
+    </div>
+    
+    <script>
+        // TODO: 再設定メール送信ロジック (API連携)
+    </script>
+</body>
+</html>
