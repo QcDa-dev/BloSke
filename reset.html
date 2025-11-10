@@ -132,29 +132,39 @@
 
             // 更新ボタンクリック時の処理
             updateBtn.addEventListener('click', async (e) => {
-                if (activeForm && activeForm.checkValidity()) {
-                    e.preventDefault();
-                    
-                    // activeFormからデータを収集
-                    const formData = new FormData(activeForm);
-                    for (let [key, value] of formData.entries()) {
-                        // inputのidからキー名を推測 (例: 'new-id-all' -> 'newID')
-                        let payloadKey = key.split('-')[0];
-                        if(key.startsWith('new-id')) payloadKey = 'newID';
-                        if(key.startsWith('new-password')) payloadKey = 'newPassword';
-                        if(key.startsWith('current-id')) payloadKey = 'currentID';
-                        if(key.startsWith('current-password')) payloadKey = 'currentPassword';
-                        
-                        payload[payloadKey] = value;
-                    }
+                // activeForm を使って入力値を取得
+                let currentPassword, newID, currentID, newPassword;
 
-                    try {
-                        const data = await callGasApi('resetCredential', payload);
-                        alert(data.message || '更新が完了しました。');
-                        window.location.href = 'login.html';
-                    } catch (error) {
-                        console.error('認証情報の更新に失敗:', error);
-                    }
+                if (mode === 'id_reset') {
+                    currentPassword = document.getElementById('current-password-id').value;
+                    newID = document.getElementById('new-id-id').value;
+                    if (!currentPassword || !newID) { alert('入力欄をすべて埋めてください。'); return; }
+                    payload.currentPassword = currentPassword;
+                    payload.newID = newID;
+
+                } else if (mode === 'password_reset') {
+                    currentID = document.getElementById('current-id-pw').value;
+                    newPassword = document.getElementById('new-password-pw').value;
+                    if (!currentID || !newPassword) { alert('入力欄をすべて埋めてください。'); return; }
+                    payload.currentID = currentID;
+                    payload.newPassword = newPassword;
+                    
+                } else if (mode === 'id_password_reset') {
+                    newID = document.getElementById('new-id-all').value;
+                    newPassword = document.getElementById('new-password-all').value;
+                    if (!newID || !newPassword) { alert('入力欄をすべて埋めてください。'); return; }
+                    payload.newID = newID;
+                    payload.newPassword = newPassword;
+                } else {
+                    return; // activeFormがない
+                }
+
+                try {
+                    const data = await callGasApi('resetCredential', payload);
+                    alert(data.message || '更新が完了しました。');
+                    window.location.href = 'login.html';
+                } catch (error) {
+                    console.error('認証情報の更新に失敗:', error);
                 }
             });
         });
