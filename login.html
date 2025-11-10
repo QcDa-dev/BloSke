@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - BloSke</title>
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    
+    <link rel="stylesheet" href="auth.css">
+    <!-- Font Awesome (Googleアイコン用) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    
+    <div class="auth-container">
+        <h1 class="auth-title">BloSke ログイン</h1>
+        
+        <form id="login-form">
+            <div class="form-group">
+                <label for="username">ユーザー名</label>
+                <input type="text" id="username" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label for="password">パスワード</label>
+                <input type="password" id="password" class="form-input" required>
+            </div>
+            
+            <button type="submit" id="login-btn" class="btn btn-primary" style="margin-top: 10px;">
+                <i class="fa-solid fa-right-to-bracket"></i> ログイン
+            </button>
+            
+            <div class="auth-divider">または</div>
+            
+            <button type="button" id="google-login-btn" class="btn btn-google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon">
+                Googleでログイン
+            </button>
+        </form>
+        
+        <div class="auth-links">
+            <a href="register.html">新規登録はこちら</a>
+            <a href="forgot.html">ID・パスワードを忘れた方はこちら</a>
+        </div>
+    </div>
+    
+    <script>
+        // TODO: ログインロジック (API連携)
+    </script>
+</body>
+</html>
