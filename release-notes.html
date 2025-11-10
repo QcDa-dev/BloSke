@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リリースノート - BloSke</title>
+    
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- 共通スタイル -->
+    <link rel="stylesheet" href="common.css">
+    
+    <!-- marked.js (Markdownパーサー) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
+
+    <main>
+        <div class="content-page">
+            <h1>リリースノート</h1>
+            
+            <div id="loading-indicator" class="text-center">
+                <p style="font-size: 1.1rem; color: #555;">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    更新情報を読み込み中です...
+                </p>
+            </div>
+
+            <div id="release-notes-container">
+                <!-- GitHub Releases の内容がここに挿入されます -->
+            </div>
+        </div>
+    </main>
+
+    <!-- 共通スクリプト -->
+    <script src="common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 共通UIの初期化
+            initCommonUI('BloSke', 'https://example.com/contact'); // TODO: お問い合わせURLを置き換えてください
+
+            // --- GitHub Releases 取得 ---
+            // TODO: ユーザー確認後、'YOUR_REPO_NAME' を正しいリポジトリ名 (例: 'BloSke') に置き換えてください。
+            const GITHUB_USER = 'qcda-dev';
+            const GITHUB_REPO = 'BloSke'; // (仮) ユーザー確認待ち
+            
+            const API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases`;
+
+            const container = document.getElementById('release-notes-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+
+            fetch(API_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`GitHub APIエラー: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(releases => {
+                    loadingIndicator.style.display = 'none';
+                    
+                    if (!releases || releases.length === 0) {
+                        container.innerHTML = '<p>リリース情報はまだありません。</p>';
+                        return;
+                    }
+
+                    releases.forEach(release => {
+                        const releaseDate = new Date(release.published_at).toLocaleDateString('ja-JP');
+                        const releaseBodyHtml = marked.parse(release.body || '変更点の記述はありません。');
+
+                        const entryDiv = document.createElement('div');
+                        entryDiv.className = 'release-entry';
+                        entryDiv.innerHTML = `
+                            <div class="release-header">
+                                <h2 class="release-title">${release.name || release.tag_name}</h2>
+                                <span class="release-date">${releaseDate}</span>
+                            </div>
+                            <div class="release-body">${releaseBodyHtml}</div>
+                        `;
+                        container.appendChild(entryDiv);
+                    });
+                })
+                .catch(error => {
+                    loadingIndicator.style.display = 'none';
+                    console.error('リリースノートの取得に失敗しました:', error);
+                    container.innerHTML = `<p style="color: red;">リリースノートの取得に失敗しました。リポジトリ名が正しいか、またはリポジトリが公開されているか確認してください。</p>`;
+                });
+        });
+    </script>
+</body>
+</html>
