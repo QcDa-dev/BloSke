@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>編集画面 - BloSke</title>
+    
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- 共通スタイル -->
+    <link rel="stylesheet" href="common.css">
+    
+    <!-- このページ専用のスタイル -->
+    <style>
+        /* カレンダーピッカーやカラーピッカーのスタイルをここに追加（将来的に） */
+    </style>
+</head>
+<body>
+
+    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
+
+    <main>
+        <div id="edit-container">
+            <!-- プロジェクト名 (仕様書 3.2.2) -->
+            <h1 id="project-title" class="project-title" title="クリックして編集">読み込み中...</h1>
+
+            <!-- ボタンフィールド (仕様書 3.2.2) -->
+            <div class="button-field">
+                <button id="add-block-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> ブロック追加</button>
+                <button id="edit-mode-btn" class="btn btn-secondary"><i class="fa-solid fa-pen-to-square"></i> 編集モード</button>
+                <button id="toggle-view-btn" class="btn btn-secondary"><i class="fa-solid fa-right-left"></i> 縦横表示</button>
+                <button id="save-btn" class="btn btn-secondary"><i class="fa-solid fa-save"></i> 保存</button>
+                <button id="export-img-btn" class="btn btn-secondary"><i class="fa-solid fa-image"></i> 画像出力</button>
+                <button id="reset-btn" class="btn btn-secondary" style="color: #DC3545; border-color: #DC3545;"><i class="fa-solid fa-trash-arrow-up"></i> リセット</button>
+            </div>
+
+            <!-- タイムテーブルフィールド (仕様書 3.2.2) -->
+            <div id="timetable-canvas-container">
+                <canvas id="timetableCanvas" width="1000" height="400">
+                    お使いのブラウザはCanvasをサポートしていません。
+                </canvas>
+            </div>
+
+            <!-- オプション (仕様書 3.2.2) -->
+            <div class="canvas-options">
+                <input type="checkbox" id="two-column-toggle">
+                <label for="two-column-toggle">2段組表示</label>
+            </div>
+        </div>
+    </main>
+
+    <!-- ブロック情報編集ウィンドウ (モーダル) (仕様書 3.2.2) -->
+    <div id="block-edit-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="block-modal-title" class="modal-title">ブロック情報編集</h2>
+            <div class="form-group">
+                <label for="block-name">ブロック名</label>
+                <input type="text" id="block-name" class="form-input" placeholder="会議A">
+            </div>
+            <div class="form-group">
+                <label for="block-start">開始</label>
+                <!-- TODO: 将来的に日付ピッカー + 時刻ピッカーに置き換え -->
+                <input type="datetime-local" id="block-start" class="form-input">
+            </div>
+            <div class="form-group">
+                <label for="block-end">終了</label>
+                <input type="datetime-local" id="block-end" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>カラー</label>
+                <!-- TODO: 将来的にカラーピッカーに置き換え -->
+                <input type="color" id="block-color" class="form-input" value="#3B82F6">
+            </div>
+            <div class="modal-actions">
+                <button id="block-edit-cancel-btn" class="btn btn-secondary">キャンセル</button>
+                <button id="block-edit-confirm-btn" class="btn btn-primary">決定</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 削除確認モーダル (仕様書 3.2.2) -->
+    <div id="delete-confirm-modal" class="modal-overlay">
+         <div class="modal-content">
+            <h2 class="modal-title">削除確認</h2>
+            <p class="text-center">本当にこのブロックを削除しますか？</p>
+            <div class="modal-actions">
+                <button id="delete-cancel-btn" class="btn btn-secondary">キャンセル</button>
+                <button id="delete-confirm-btn" class="btn btn-primary" style="background-color: #DC3545;">はい、削除します</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- リセット確認モーダル (仕様書 3.2.2) -->
+    <div id="reset-confirm-modal" class="modal-overlay">
+         <div class="modal-content">
+            <h2 class="modal-title">リセット確認</h2>
+            <p class="text-center">プロジェクトをリセットし、すべてのブロックを削除します。この操作は取り消せません。よろしいですか？</p>
+            <div class="modal-actions">
+                <button id="reset-cancel-btn" class="btn btn-secondary">キャンセル</button>
+                <button id="reset-confirm-btn" class="btn btn-primary" style="background-color: #DC3545;">はい、リセットします</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 共通スクリプト -->
+    <script src="common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 共通UIの初期化
+            initCommonUI('BloSke', 'https://example.com/contact'); // TODO: お問い合わせURLを置き換えてください
+
+            const projectTitleEl = document.getElementById('project-title');
+            const canvas = document.getElementById('timetableCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // --- Canvas描画 (空の状態) ---
+            function drawEmptyCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.font = "1.2rem 'Noto Sans JP', sans-serif";
+                ctx.fillStyle = "#adb5bd";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("イベントが1つも登録されていません。", canvas.width / 2, canvas.height / 2);
+                ctx.restore();
+            }
+
+            // --- プロジェクト読み込み ---
+            function loadProject() {
+                try {
+                    const isNew = sessionStorage.getItem('bloSkeIsNewProject') === 'true';
+                    const localData = localStorage.getItem('bloSkeDraft');
+                    
+                    if (isNew) {
+                        // 新規作成
+                        const projectName = sessionStorage.getItem('bloSkeCurrentProjectName') || '新規プロジェクト';
+                        projectTitleEl.textContent = projectName;
+                        sessionStorage.removeItem('bloSkeIsNewProject'); // フラグ削除
+                        localStorage.removeItem('bloSkeDraft'); // 古いドラフトを消す
+                        drawEmptyCanvas();
+                    } else if (localData) {
+                        // ローカル保存からの復元
+                        console.log('ローカルデータを復元します。');
+                        const data = JSON.parse(localData);
+                        projectTitleEl.textContent = data.projectName || '無題のプロジェクト';
+                        // TODO: data.blocks を使ってCanvasを描画するロジック
+                        // 現時点では空表示
+                        drawEmptyCanvas();
+                    } else {
+                        // ローカルデータなし (index.htmlから直接来たなど)
+                        alert('プロジェクト情報が見つかりません。メイン画面に戻ります。');
+                        window.location.href = 'index.html';
+                        return;
+                    }
+
+                } catch (e) {
+                    console.error('プロジェクトの読み込みに失敗しました。', e);
+                    projectTitleEl.textContent = '読み込みエラー';
+                    drawEmptyCanvas();
+                }
+            }
+            
+            // --- 初期化 ---
+            loadProject();
+
+
+            // --- モーダル設定 ---
+            // ブロック追加モーダル
+            document.getElementById('add-block-btn').addEventListener('click', () => {
+                document.getElementById('block-modal-title').textContent = 'ブロック追加';
+                // TODO: フォームをリセットする
+                showModal('block-edit-modal');
+            });
+            setupModalClose('block-edit-modal', ['block-edit-cancel-btn']);
+            
+            // リセット確認モーダル
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                showModal('reset-confirm-modal');
+            });
+            setupModalClose('reset-confirm-modal', ['reset-cancel-btn']);
+            
+            // TODO: 削除確認モーダル (編集モード時に動的に設定)
+            // setupModalClose('delete-confirm-modal', ['delete-cancel-btn']);
+
+            // --- 将来的なCanvasリサイズ対応 (参考) ---
+            function resizeCanvas() {
+                const container = document.getElementById('timetable-canvas-container');
+                // コンテナの幅に合わせる (ただし、最小幅は確保)
+                canvas.width = Math.max(container.clientWidth, 1000); 
+                // 高さは固定またはコンテナに合わせる
+                canvas.height = 400; 
+                
+                // 再描画
+                drawEmptyCanvas(); // TODO: 実際の描画関数を呼ぶ
+            }
+            
+            // ウィンドウリサイズ時にCanvasもリサイズ
+            window.addEventListener('resize', resizeCanvas);
+            // resizeCanvas(); // 初期描画
+        });
+    </script>
+</body>
+</html>
