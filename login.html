@@ -46,8 +46,77 @@
         </div>
     </div>
     
+    <!-- Firebase SDK (互換性バージョン) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
+    <!-- 共通スクリプト (API連携) -->
+    <script src="common.js"></script>
     <script>
-        // TODO: ログインロジック (API連携)
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginForm = document.getElementById('login-form');
+            const googleLoginBtn = document.getElementById('google-login-btn');
+
+            // オリジナルIDでのログイン (仕様書 4.1)
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                try {
+                    const data = await callGasApi('loginUser', {
+                        authType: 'original',
+                        username: username,
+                        password: password
+                    });
+                    
+                    // ログイン成功
+                    saveUserSession(data.user);
+                    alert('ログインしました。');
+                    // TODO: 保存（save）ボタンから遷移してきた場合は edit.html に戻るロジックが必要
+                    window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
+
+                } catch (error) {
+                    // callGasApiがエラーをalertで表示
+                    console.error('オリジナルログイン失敗:', error);
+                }
+            });
+
+            // Googleでのログイン (仕様書 4.1)
+            googleLoginBtn.addEventListener('click', async () => {
+                if (!firebaseAuth || !googleProvider) {
+                    alert('Google認証の初期化に失敗しました。');
+                    return;
+                }
+                
+                try {
+                    const result = await firebaseAuth.signInWithPopup(googleProvider);
+                    const user = result.user;
+                    
+                    // Firebase認証成功後、GAS APIでDB（Sheets）に照合/登録
+                    const data = await callGasApi('loginUser', {
+                        authType: 'google',
+                        email: user.email,
+                        accountName: user.displayName || user.email // アカウント名
+                    });
+                    
+                    // ログイン成功
+                    saveUserSession(data.user);
+                    alert('ログインしました。');
+                    // TODO: 保存（save）ボタンから遷移してきた場合は edit.html に戻るロジックが必要
+                    window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
+
+                } catch (error) {
+                    // callGasApiのエラーは内部でalertされる
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                         console.error('Googleログイン失敗:', error);
+                         if (!error.message.includes('HTTPエラー')) {
+                            alert(`Google認証に失敗しました: ${error.message}`);
+                         }
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>
