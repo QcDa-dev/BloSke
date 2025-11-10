@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使い方ガイド - BloSke</title>
+    
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- 共通スタイル -->
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
+
+    <main>
+        <div class="content-page">
+            <h1>使い方ガイド</h1>
+
+            <section>
+                <h2>BloSke (ブロスケ) とは？</h2>
+                <p>
+                    BloSkeは、イベントや会議、個人の学習計画など、あらゆるタイムテーブルを「ブロック」を組み立てるように直感的に作成できるWebアプリです。
+                </p>
+            </section>
+            
+            <section>
+                <h2>1. プロジェクトの開始</h2>
+                <p>
+                    メイン画面 (index.html) にアクセスすると、2つの選択肢があります。
+                </p>
+                <ul>
+                    <li><strong>[新規作成]:</strong><br>
+                        ボタンを押すと、プロジェクト名の入力ウィンドウが開きます。名前を決めて「決定」を押すと、まっさらな編集画面 (edit.html) に移動します。
+                    </li>
+                    <li><strong>[保存済みプロジェクト]:</strong><br>
+                        以前にGoogleアカウントで保存したプロジェクトを読み込む場合に選択します。ログイン画面に移動します。
+                    </li>
+                </ul>
+                <p>
+                    <strong>自動保存について:</strong><br>
+                    編集中のタイムテーブルは、24時間程度の間、自動的にブラウザに一時保存されます。次回アプリを開いた際、自動的に前回の続きから再開できます。(仕様書 3.2.1)
+                </p>
+            </section>
+
+            <section>
+                <h2>2. タイムテーブルの編集 (edit.html)</h2>
+                <p>
+                    編集画面では、6つの主要な操作ボタンが用意されています。
+                </p>
+                <ul>
+                    <li><strong>ブロック追加:</strong><br>
+                        タイムテーブルに追加したい予定（ブロック）の情報を入力します。「ブロック名」「開始日時」「終了日時」「カラー」を設定して「決定」を押すと、Canvas（タイムテーブルフィールド）上に追加されます。
+                    </li>
+                    <li><strong>編集モード:</strong><br>
+                        このボタンを押すと「編集モード終了」に切り替わります。モード中は、Canvas上の各ブロックをクリックして情報を再編集したり、表示される [×] ボタンでブロックを削除したりできます。
+                    </li>
+                    <li><strong>縦横表示:</strong><br>
+                        タイムテーブルの時間軸を「横書き（時間が左から右へ）」と「縦書き（時間が上から下へ）」で切り替えます。（※現在実装準備中）
+                    </li>
+                    <li><strong>保存:</strong><br>
+                        編集中のタイムテーブルをGoogleアカウントに関連付けて保存します。未ログインの場合は、ログイン画面に誘導されます。
+                    </li>
+                    <li><strong>画像出力:</strong><br>
+                        表示されているタイムテーブルをPNGやJPEG画像としてダウンロードできます。
+                    </li>
+                    <li><strong>リセット:</strong><br>
+                        現在のプロジェクトのすべてのブロックを削除し、初期状態に戻します。
+                    </li>
+                </ul>
+            </section>
+            
+            <section>
+                <h2>3. Canvasの操作</h2>
+                <p>
+                    タイムテーブルが表示される白い領域（Canvas）では、以下の操作が可能です。
+                </p>
+                <ul>
+                    <li><strong>ドラッグ＆ドロップ:</strong><br>
+                        ブロックを長押し（またはクリックしたまま）で掴み、左右にドラッグすると時間を変更できます。時間帯が重なるブロックがある場合、上下にドラッグして行を入れ替えることもできます。
+                    </li>
+                    <li><strong>スクロール:</strong><br>
+                        タイムテーブルが画面幅に収まらない場合、Canvas領域内を横にスクロールして全体を見渡せます。
+                    </li>
+                </ul>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 共通スクリプト -->
+    <script src="common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 共通UIの初期化
+            initCommonUI('BloSke', 'https://example.com/contact'); // TODO: お問い合わせURLを置き換えてください
+        });
+    </script>
+</body>
+</html>
