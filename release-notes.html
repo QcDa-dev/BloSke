@@ -12,26 +12,26 @@
 
     <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
-    
-    <!-- marked.js (Markdownパーサー) -->
+
+    <!-- Firebase SDK (common.js より先に読み込む) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
+    <!-- marked.js (Markdown -> HTML) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
 
     <main>
         <div class="content-page">
             <h1>リリースノート</h1>
             
-            <div id="loading-indicator" class="text-center">
-                <p style="font-size: 1.1rem; color: #555;">
-                    <i class="fa-solid fa-spinner fa-spin"></i>
-                    更新情報を読み込み中です...
-                </p>
+            <div id="loading-releases" style="text-align: center; padding: 20px;">
+                <p>リリース情報を読み込んでいます...</p>
             </div>
-
+            
             <div id="release-notes-container">
-                <!-- GitHub Releases の内容がここに挿入されます -->
+                <!-- GitHub APIから取得した内容がここに入ります -->
             </div>
         </div>
     </main>
@@ -40,54 +40,55 @@
     <script src="common.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIの初期化
-            initCommonUI('BloSke'); 
+            // 共通UIを初期化
+            initCommonUI('BloSke');
 
-            // --- GitHub Releases 取得 ---
-            // TODO: ユーザー確認後、'YOUR_REPO_NAME' を正しいリポジトリ名 (例: 'BloSke') に置き換えてください。
-            const GITHUB_USER = 'qcda-dev';
-            const GITHUB_REPO = 'BloSke'; 
-            
-            const API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases`;
+            // --- GitHub Releases API から情報を取得 (仕様書 3.2.9) ---
+            const GITHUB_REPO = 'qcda-dev/BloSke'; // リポジトリ名
+            const API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
 
             const container = document.getElementById('release-notes-container');
-            const loadingIndicator = document.getElementById('loading-indicator');
+            const loading = document.getElementById('loading-releases');
 
             fetch(API_URL)
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`GitHub APIエラー: ${response.status}`);
+                        throw new Error(`GitHub API エラー: ${response.status}`);
                     }
                     return response.json();
                 })
                 .then(releases => {
-                    loadingIndicator.style.display = 'none';
-                    
-                    if (!releases || releases.length === 0) {
+                    loading.style.display = 'none';
+                    if (releases.length === 0) {
                         container.innerHTML = '<p>リリース情報はまだありません。</p>';
                         return;
                     }
 
                     releases.forEach(release => {
-                        const releaseDate = new Date(release.published_at).toLocaleDateString('ja-JP');
-                        const releaseBodyHtml = marked.parse(release.body || '変更点の記述はありません。');
-
-                        const entryDiv = document.createElement('div');
-                        entryDiv.className = 'release-entry';
-                        entryDiv.innerHTML = `
+                        const releaseDate = new Date(release.published_at).toLocaleString('ja-JP');
+                        
+                        const entry = document.createElement('div');
+                        entry.className = 'release-entry';
+                        
+                        // marked.js を使って Markdown を HTML に変換
+                        const bodyHtml = marked.parse(release.body);
+                        
+                        entry.innerHTML = `
                             <div class="release-header">
                                 <h2 class="release-title">${release.name || release.tag_name}</h2>
                                 <span class="release-date">${releaseDate}</span>
                             </div>
-                            <div class="release-body">${releaseBodyHtml}</div>
+                            <div class="release-body">
+                                ${bodyHtml}
+                            </div>
                         `;
-                        container.appendChild(entryDiv);
+                        container.appendChild(entry);
                     });
                 })
                 .catch(error => {
-                    loadingIndicator.style.display = 'none';
-                    console.error('リリースノートの取得に失敗しました:', error);
-                    container.innerHTML = `<p style="color: red;">リリースノートの取得に失敗しました。リポジトリ名が正しいか、またはリポジトリが公開されているか確認してください。</p>`;
+                    loading.style.display = 'none';
+                    console.error('リリースノートの取得に失敗:', error);
+                    container.innerHTML = '<p style="color: red;">リリースノートの取得に失敗しました。</p>';
                 });
         });
     </script>
