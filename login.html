@@ -57,6 +57,17 @@
             const loginForm = document.getElementById('login-form');
             const googleLoginBtn = document.getElementById('google-login-btn');
 
+            // ログイン後のリダイレクト先を決定
+            const redirectAfterLogin = () => {
+                const reason = sessionStorage.getItem('login_redirect_reason');
+                if (reason === 'save') {
+                    sessionStorage.removeItem('login_redirect_reason');
+                    window.location.href = 'edit.html'; // 保存のために来た場合は編集画面へ
+                } else {
+                    window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
+                }
+            };
+
             // オリジナルIDでのログイン (仕様書 4.1)
             loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -73,8 +84,7 @@
                     // ログイン成功
                     saveUserSession(data.user);
                     alert('ログインしました。');
-                    // TODO: 保存（save）ボタンから遷移してきた場合は edit.html に戻るロジックが必要
-                    window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
+                    redirectAfterLogin();
 
                 } catch (error) {
                     // callGasApiがエラーをalertで表示
@@ -103,8 +113,7 @@
                     // ログイン成功
                     saveUserSession(data.user);
                     alert('ログインしました。');
-                    // TODO: 保存（save）ボタンから遷移してきた場合は edit.html に戻るロジックが必要
-                    window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
+                    redirectAfterLogin();
 
                 } catch (error) {
                     // callGasApiのエラーは内部でalertされる
