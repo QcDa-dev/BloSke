@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BloSke - タイムテーブル作成</title>
+    
+    <!-- アイコン設定 -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- 共通スタイル -->
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
+
+    <main>
+        <div class="container text-center">
+            <h1 style="font-size: 2.5rem; color: #333; margin-top: 50px; margin-bottom: 30px;">
+                タイムテーブルを、もっと簡単に。
+            </h1>
+            <p style="font-size: 1.1rem; color: #555; margin-bottom: 50px;">
+                BloSke (ブロスケ) へようこそ。<br>
+                直感的な操作で、イベントや予定をブロックのように組み立てよう。
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 20px; max-width: 350px; margin: 0 auto;">
+                <button id="new-project-btn" class="btn btn-primary" style="padding: 15px 25px; font-size: 1.2rem;">
+                    <i class="fa-solid fa-plus"></i> 新規作成
+                </button>
+                <button id="load-project-btn" class="btn btn-secondary" style="padding: 15px 25px; font-size: 1.2rem;">
+                    <i class="fa-solid fa-folder-open"></i> 保存済みプロジェクト
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 新規作成モーダル (仕様書 3.2.1) -->
+    <div id="new-project-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="modal-title">新規プロジェクト作成</h2>
+            <div class="form-group">
+                <label for="project-name-input">プロジェクト名</label>
+                <input type="text" id="project-name-input" class="form-input" placeholder="my project 1">
+            </div>
+            <div class="modal-actions">
+                <button id="new-project-cancel-btn" class="btn btn-secondary">キャンセル</button>
+                <button id="new-project-confirm-btn" class="btn btn-primary">決定</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 共通スクリプト -->
+    <script src="common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 共通UIの初期化
+            initCommonUI('BloSke', 'https://example.com/contact'); // TODO: お問い合わせURLを置き換えてください
+
+            // --- ローカル保存データのチェック (仕様書 3.2.1) ---
+            try {
+                const localData = localStorage.getItem('bloSkeDraft');
+                if (localData) {
+                    // TODO: 本来は確認モーダルを出すべきだが、仕様書に基づき直接リダイレクト
+                    console.log('ローカルデータが見つかりました。編集画面に遷移します。');
+                    window.location.href = 'edit.html';
+                    return; // 遷移するので以降の処理は不要
+                }
+            } catch (e) {
+                console.error('LocalStorageへのアクセスに失敗しました。', e);
+            }
+
+            // --- モーダル設定 ---
+            const newProjectBtn = document.getElementById('new-project-btn');
+            const newProjectModal = document.getElementById('new-project-modal');
+            const projectNameInput = document.getElementById('project-name-input');
+            
+            // 新規作成ボタンクリック
+            newProjectBtn.addEventListener('click', () => {
+                // デフォルトのプロジェクト名を設定
+                projectNameInput.value = `my project ${Math.floor(Math.random() * 100) + 1}`;
+                showModal('new-project-modal');
+            });
+
+            // モーダルの閉じるボタン設定
+            setupModalClose('new-project-modal', ['new-project-cancel-btn']);
+
+            // モーダル決定ボタン
+            document.getElementById('new-project-confirm-btn').addEventListener('click', () => {
+                const projectName = projectNameInput.value.trim() || projectNameInput.placeholder;
+                
+                // プロジェクト名をsessionStorageに保存して編集画面へ遷移
+                try {
+                    sessionStorage.setItem('bloSkeCurrentProjectName', projectName);
+                    // 新規作成フラグ（ローカルデータを読み込まないように）
+                    sessionStorage.setItem('bloSkeIsNewProject', 'true');
+                    window.location.href = 'edit.html';
+                } catch (e) {
+                    console.error('SessionStorageへの保存に失敗しました。', e);
+                    alert('プロジェクトの作成に失敗しました。');
+                }
+            });
+
+            // --- 保存済みプロジェクトボタン ---
+            document.getElementById('load-project-btn').addEventListener('click', () => {
+                window.location.href = 'login.html';
+            });
+        });
+    </script>
+</body>
+</html>
