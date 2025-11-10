@@ -12,165 +12,137 @@
 
     <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
+
+    <!-- Firebase SDKの読み込み (common.jsより前) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 </head>
 <body>
-    <!-- 共通UI (ヘッダー, フッター, メニュー) は common.js が自動挿入 -->
 
     <main>
-        <div class="content-page" style="max-width: 600px;">
+        <div class="container">
             <h1>保存済みプロジェクト</h1>
             
+            <!-- ユーザー情報 -->
             <div id="user-info" class="user-info-bar">
                 <i class="fa-solid fa-user"></i>
                 <span id="username-display">読み込み中...</span>
             </div>
 
-            <div id="loading-indicator" class="text-center" style="margin: 30px 0;">
-                <p><i class="fa-solid fa-spinner fa-spin"></i> プロジェクト一覧を読み込んでいます...</p>
-            </div>
-            
+            <!-- プロジェクト一覧 -->
             <div id="projects-list-container" class="projects-list">
-                <!-- 
-                <div class="project-item">
-                    <span>My Project 1</span>
-                    <button class="btn btn-primary btn-sm"><i class="fa-solid fa-download"></i> 読込</button>
-                </div>
-                -->
-            </div>
-            
-            <div id="no-projects-message" class="text-center hidden" style="margin: 30px 0; color: #555;">
-                <p>保存されているプロジェクトはありません。</p>
+                <!-- <div class="project-item">
+                    <span>プロジェクト名</span>
+                    <button class="btn btn-primary btn-sm"><i class="fa-solid fa-folder-open"></i> 読み込む</button>
+                </div> -->
+                <p id="loading-projects">プロジェクト一覧を読み込んでいます...</p>
             </div>
 
-            <div style="text-align: center; margin-top: 30px;">
-                <a href="index.html" class="btn btn-secondary">
+            <div style="margin-top: 30px; text-align: center;">
+                <button id="back-to-main-btn" class="btn btn-secondary">
                     <i class="fa-solid fa-arrow-left"></i> メイン画面に戻る
-                </a>
+                </button>
             </div>
         </div>
     </main>
-
-    <!-- Firebase SDK (互換性バージョン) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 
     <!-- 共通スクリプト -->
     <script src="common.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIの初期化
+            // 共通UIを初期化
             initCommonUI('BloSke');
+            
+            // 認証ガード (未ログインならlogin.htmlへ)
+            const user = getUserSession();
+            if (!user) {
+                authGuard(); // (内部でlogin.htmlへリダイレクト)
+                return;
+            }
 
             const usernameDisplay = document.getElementById('username-display');
-            const loadingIndicator = document.getElementById('loading-indicator');
             const listContainer = document.getElementById('projects-list-container');
-            const noProjectsMessage = document.getElementById('no-projects-message');
+            const loadingMsg = document.getElementById('loading-projects');
 
-            // --- ログイン状態の確認 ---
-            const currentUser = authGuard(true); // 認証チェック＆リダイレクト
-            if (!currentUser) return; // authGuardがリダイレクトする
-            
-            usernameDisplay.textContent = `${currentUser.username} さんのプロジェクト`;
-            fetchProjects(currentUser.username);
+            usernameDisplay.textContent = user.username; // ユーザー名を表示
 
-
-            // --- プロジェクト一覧の取得 (仕様書 4.3) ---
-            async function fetchProjects(username) {
+            // --- プロジェクト一覧の読み込み (仕様書 4.3) ---
+            async function loadProjects() {
                 try {
-                    const data = await callGasApi('listProjects', { username: username });
-                    const mockProjects = data.projects || [];
+                    const data = await callGasApi('listProjects', {
+                        username: user.username
+                    });
                     
-                    loadingIndicator.style.display = 'none';
+                    loadingMsg.style.display = 'none'; // ローディング非表示
+
+                    if (data.projects && data.projects.length > 0) {
+                        data.projects.forEach(projectName => {
+                            const item = document.createElement('div');
+                            item.className = 'project-item';
+                            item.innerHTML = `
+                                <span>${escapeHTML(projectName)}</span>
+                                <button class="btn btn-primary btn-sm" data-project-name="${escapeHTML(projectName)}">
+                                    <i class="fa-solid fa-folder-open"></i> 読み込む
+                                </button>
+                            `;
+                            listContainer.appendChild(item);
+                        });
+                    } else {
+                        listContainer.innerHTML = '<p>保存されているプロジェクトはありません。</p>';
+                    }
+
+                } catch (error) {
+                    loadingMsg.textContent = 'プロジェクト一覧の読み込みに失敗しました。';
+                    loadingMsg.style.color = 'red';
+                    console.error('プロジェクト一覧の読み込み失敗:', error);
+                }
+            }
+
+            loadProjects();
+
+            // --- プロジェクト読み込み処理 (仕様書 4.3) ---
+            listContainer.addEventListener('click', async (e) => {
+                if (e.target.tagName === 'BUTTON' && e.target.dataset.projectName) {
+                    const projectName = e.target.dataset.projectName;
                     
-                    if (mockProjects.length === 0) {
-                        noProjectsMessage.classList.remove('hidden');
+                    if (!confirm(`「${projectName}」を読み込みますか？\n（現在編集中の内容は失われます）`)) {
                         return;
                     }
-                    
-                    mockProjects.forEach(projectName => {
-                        const item = document.createElement('div');
-                        item.className = 'project-item';
-                        
-                        const nameSpan = document.createElement('span');
-                        nameSpan.textContent = projectName;
-                        
-                        const loadButton = document.createElement('button');
-                        loadButton.className = 'btn btn-primary btn-sm';
-                        loadButton.innerHTML = `<i class="fa-solid fa-download"></i> 読込`;
-                        
-                        loadButton.addEventListener('click', () => loadProjectData(username, projectName));
-                        
-                        item.appendChild(nameSpan);
-                        item.appendChild(loadButton);
-                        listContainer.appendChild(item);
-                    });
 
-                } catch (error) {
-                    loadingIndicator.style.display = 'none';
-                    noProjectsMessage.textContent = 'プロジェクトの読み込みに失敗しました。';
-                    noProjectsMessage.classList.remove('hidden');
-                    console.error('プロジェクト一覧の取得失敗:', error);
-                }
-            }
-
-            // --- プロジェクト読み込み (仕様書 4.3) ---
-            async function loadProjectData(username, projectName) {
-                try {
-                    const data = await callGasApi('loadProject', { 
-                        username: username, 
-                        projectName: projectName 
-                    });
-                    
-                    // 取得したCSVデータをlocalStorageに保存し、edit.htmlに遷移
-                    // 注意: localStorageは容量制限があるため、大きなデータは不向き。
-                    // 仕様書 3.2.1 に従い、ローカル保存(localStorage)を使用する。
-                    
-                    // CSVデータをパースしてJSON形式に変換（仮）
-                    // TODO: 実際のCSVパースロジックを実装
-                    const blocks = parseCsvToBlocks(data.csvData); 
-                    
-                    const projectData = {
-                        projectName: projectName,
-                        blocks: blocks 
-                    };
-                    
-                    localStorage.setItem('bloSkeDraft', JSON.stringify(projectData));
-                    // 新規作成フラグは立てない (ローカルデータを読み込むため)
-                    sessionStorage.removeItem('bloSkeIsNewProject');
-                    
-                    window.location.href = 'edit.html';
-
-                } catch (error) {
-                    console.error('プロジェクトの読み込みに失敗:', error);
-                }
-            }
-
-            /**
-             * CSVデータをブロックの配列に変換 (簡易パース)
-             * 仕様書 6.1 の形式を想定: ブロック名,開始日時ISO,終了日時ISO,カラーコード
-             */
-            function parseCsvToBlocks(csvData) {
-                if (!csvData) return [];
-                const blocks = [];
-                const lines = csvData.split('\n');
-                
-                // 1行目 (ヘッダー) をスキップ
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
-                    
-                    const parts = line.split(',');
-                    if (parts.length >= 4) {
-                        blocks.push({
-                            name: parts[0],
-                            start: parts[1],
-                            end: parts[2],
-                            color: parts[3]
-                            // TODO: Canvas描画に必要な他のプロパティも追加
+                    try {
+                        const data = await callGasApi('loadProject', {
+                            username: user.username,
+                            projectName: projectName
                         });
+                        
+                        // 読み込んだCSVデータをセッションストレージに保存
+                        sessionStorage.setItem('bloske_loaded_csv', data.csvData);
+                        sessionStorage.setItem('bloske_current_project_name', projectName);
+                        
+                        // 編集画面に遷移
+                        window.location.href = 'edit.html';
+
+                    } catch (error) {
+                         console.error('プロジェクトの読み込み失敗:', error);
                     }
                 }
-                return blocks;
+            });
+
+            // メイン画面に戻る
+            document.getElementById('back-to-main-btn').addEventListener('click', () => {
+                window.location.href = 'index.html';
+            });
+
+            function escapeHTML(str) {
+                return str.replace(/[&<>"']/g, function(match) {
+                    return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                    }[match];
+                });
             }
         });
     </script>
