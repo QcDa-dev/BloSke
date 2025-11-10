@@ -51,8 +51,71 @@
         </div>
     </div>
     
+    <!-- Firebase SDK (互換性バージョン) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    
+    <!-- 共通スクリプト (API連携) -->
+    <script src="common.js"></script>
     <script>
-        // TODO: 新規登録ロジック (API連携)
+        document.addEventListener('DOMContentLoaded', () => {
+            const registerForm = document.getElementById('register-form');
+            const googleRegisterBtn = document.getElementById('google-register-btn');
+
+            // オリジナルIDでの登録 (仕様書 4.1)
+            registerForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                const email = document.getElementById('email').value;
+
+                try {
+                    const data = await callGasApi('registerUser', {
+                        authType: 'original',
+                        username: username,
+                        password: password,
+                        email: email
+                    });
+                    
+                    alert(data.message || '登録が完了しました。ログイン画面に移動します。');
+                    window.location.href = 'login.html';
+
+                } catch (error) {
+                    console.error('オリジナル登録失敗:', error);
+                }
+            });
+
+            // Googleでの登録 (仕様書 4.1)
+            googleRegisterBtn.addEventListener('click', async () => {
+                if (!firebaseAuth || !googleProvider) {
+                    alert('Google認証の初期化に失敗しました。');
+                    return;
+                }
+                
+                try {
+                    const result = await firebaseAuth.signInWithPopup(googleProvider);
+                    const user = result.user;
+                    
+                    // Firebase認証成功後、GAS APIでDB（Sheets）に登録
+                    const data = await callGasApi('registerUser', {
+                        authType: 'google',
+                        email: user.email,
+                        accountName: user.displayName || user.email // アカウント名
+                    });
+                    
+                    alert(data.message || '登録が完了しました。ログイン画面に移動します。');
+                    window.location.href = 'login.html';
+
+                } catch (error) {
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                         console.error('Google登録失敗:', error);
+                         if (!error.message.includes('HTTPエラー')) {
+                            alert(`Google認証に失敗しました: ${error.message}`);
+                         }
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>
