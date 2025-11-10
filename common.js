@@ -1,18 +1,11 @@
 /* BloSke (ブロスケ) 共通スクリプト */
 
-// --- Firebase SDK のインポート ---
-// (使用するHTMLファイル側で <script type="module"> としてインポートする必要があります)
-// (ただし、今回は script タグ直書きのため、グローバル関数として定義します)
-
-// Firebase SDK (CDN)
-// (各HTMLファイルで読み込む必要があります。ここでは common.js からの動的ロードは行いません)
-/*
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+/* * Firebase SDK (firebase-app-compat.js, firebase-auth-compat.js) は
+ * このスクリプトを使用する全てのHTMLファイルの <head> 内で
+ * 先に読み込まれている必要があります。
 */
 
 // --- 定数 ---
-// 仕様書 4. APIエンドポイント
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxN0czK9zQ2uNLr-Avho6BCP8uci2yBedOeMqlvoqT5bPYlhQb38m4Wt3W1f6e5voyS/exec';
 
 // TODO: Firebase プロジェクトの設定に置き換えてください
@@ -81,7 +74,7 @@ function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/
             <nav>
                 <ul>
                     <li><a href="guide.html" target="_blank"><i class="fa-solid fa-book-open fa-fw"></i> 使い方ガイド</a></li>
-                    <li><a href="${contactUrl}" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
+                    <li><a href="https://forms.gle/XuzBvktEayWMG2po6" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
                     <li><a href="release-notes.html" target="_blank"><i class="fa-solid fa-bullhorn fa-fw"></i> リリースノート</a></li>
                 </ul>
                 <div class="menu-divider"></div>
@@ -90,13 +83,18 @@ function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/
                     <li><a href="https://qcda-dev.github.io/HP/terms-of-service.html" target="_blank" class="menu-sub-link">利用規約</a></li>
                     <li><a href="https://qcda-dev.github.io/HP/community-guidelines.html" target="_blank" class="menu-sub-link">コミュニティガイドライン</a></li>
                 </ul>
+                <!-- ログアウト機能 -->
+                <div class="menu-divider"></div>
+                <ul>
+                    <li><a href="#" id="common-logout-btn"><i class="fa-solid fa-right-from-bracket fa-fw"></i> ログアウト</a></li>
+                </ul>
             </nav>
             <div class="menu-version">ver 1.0.0</div>
         </div>
     `;
     document.body.appendChild(menuContainer);
 
-    // --- メニューのイベントリスナー設定 ---
+    // --- ハンバーガーメニューのイベントリスナー設定 ---
     const menuIcon = document.getElementById('hamburger-icon');
     const sideMenu = document.getElementById('side-menu');
     const menuOverlay = document.getElementById('menu-overlay');
@@ -109,12 +107,20 @@ function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/
 
     menuIcon.addEventListener('click', toggleMenu);
     menuOverlay.addEventListener('click', toggleMenu);
+
+    // ログアウトボタンのイベントリスナー
+    const logoutBtn = document.getElementById('common-logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (confirm('ログアウトしますか？')) {
+                logout();
+            }
+        });
+    }
 }
 
-/**
- * モーダルウィンドウを表示します。
- * @param {string} modalId - 表示するモーダルのID。
- */
+// --- モーダル表示 ---
 function showModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -122,10 +128,7 @@ function showModal(modalId) {
     }
 }
 
-/**
- * モーダルウィンドウを非表示にします。
- * @param {string} modalId - 非表示にするモーダルのID。
- */
+// --- モーダル非表示 ---
 function hideModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -133,31 +136,24 @@ function hideModal(modalId) {
     }
 }
 
-/**
- * モーダルの閉じるボタンやオーバーレイにイベントリスナーを設定します。
- * @param {string} modalId - 対象のモーダルのID。
- * @param {string[]} closeTriggerIds - モーダルを閉じるトリガーとなる要素のID配列 (例: ['cancel-btn', 'close-icon'])。
- */
-function setupModalClose(modalId, closeTriggerIds = []) {
+// --- モーダルクローズ設定 (オーバーレイ/キャンセルボタン) ---
+function setupModalClose(modalId, cancelSelector) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
 
-    // オーバーレイクリックで閉じる
-    modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
+    // オーバーレイ
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
             hideModal(modalId);
         }
     });
-
-    // トリガーIDクリックで閉じる
-    closeTriggerIds.forEach(id => {
-        const trigger = document.getElementById(id);
-        if (trigger) {
-            trigger.addEventListener('click', () => {
-                hideModal(modalId);
-            });
-        }
-    });
+    // キャンセルボタン
+    const cancelBtn = modal.querySelector(cancelSelector);
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            hideModal(modalId);
+        });
+    }
 }
 
 /**
@@ -176,128 +172,86 @@ async function callGasApi(action, payload) {
       mode: 'cors',
       cache: 'no-cache',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8', 
       },
       body: JSON.stringify({ action, payload }),
       redirect: 'follow',
     });
 
     if (!response.ok) {
-        throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
+      throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
 
     if (result.success) {
-      return result.data; // 成功時は data プロパティを返す
+      return result.data;
     } else {
-      // GAS側でエラーが捕捉された場合
+      // GAS側でsuccess: falseが返された場合
       throw new Error(result.message || '不明なサーバーエラーが発生しました。');
     }
+
   } catch (error) {
     console.error('API呼び出しに失敗しました:', action, error);
-    // ユーザーにエラーを通知
-    alert(`エラーが発生しました: ${error.message}`);
-    throw error; // 呼び出し元でさらに処理できるようにエラーを再スロー
+    alert(`エラー: ${error.message}`);
+    throw error; // 呼び出し元でキャッチできるように再スロー
+  
   } finally {
     // ローディングインジケーターを非表示 (仮)
     showLoadingSpinner(false);
   }
 }
 
-/**
- * 簡易ローディングスピナーの表示/非表示
- * (より堅牢な実装に置き換え推奨)
- * @param {boolean} show - 表示するかどうか
- */
+// --- ローディングスピナー (仮) ---
+// TODO: より良いUIに置き換える
 function showLoadingSpinner(show) {
-    let spinner = document.getElementById('global-spinner');
     if (show) {
-        if (!spinner) {
-            spinner = document.createElement('div');
-            spinner.id = 'global-spinner';
-            spinner.style.position = 'fixed';
-            spinner.style.top = '50%';
-            spinner.style.left = '50%';
-            spinner.style.transform = 'translate(-50%, -50%)';
-            spinner.style.border = '5px solid #f3f3f3';
-            spinner.style.borderTop = '5px solid var(--main-color)';
-            spinner.style.borderRadius = '50%';
-            spinner.style.width = '40px';
-            spinner.style.height = '40px';
-            spinner.style.animation = 'spin 1s linear infinite';
-            spinner.style.zIndex = '9999';
-            document.body.appendChild(spinner);
-            
-            // スピナー用のアニメーション定義
-            if (!document.getElementById('spinner-style')) {
-                const style = document.createElement('style');
-                style.id = 'spinner-style';
-                style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-                document.head.appendChild(style);
-            }
-        }
-        spinner.style.display = 'block';
+        console.log("... (Loading) ...");
     } else {
-        if (spinner) {
-            spinner.style.display = 'none';
-        }
+        console.log("... (Done) ...");
     }
 }
 
-/**
- * ユーザー情報をセッションストレージに保存
- * @param {object} user - { username, email }
- */
-function saveUserSession(user) {
-    try {
-        sessionStorage.setItem('bloSkeUser', JSON.stringify(user));
-    } catch (e) {
-        console.error('セッションストレージへの保存に失敗しました。', e);
+// --- 認証セッション管理 (localStorage) ---
+const USER_SESSION_KEY = 'bloske_user_session';
+
+function saveUserSession(userData) {
+    if (!userData || !userData.username) {
+        console.error('保存するユーザー情報が不正です。');
+        return;
     }
+    localStorage.setItem(USER_SESSION_KEY, JSON.stringify(userData));
 }
 
-/**
- * セッションストレージからユーザー情報を取得
- * @returns {object | null} - ユーザー情報またはnull
- */
 function getUserSession() {
+    const sessionData = localStorage.getItem(USER_SESSION_KEY);
     try {
-        const user = sessionStorage.getItem('bloSkeUser');
-        return user ? JSON.parse(user) : null;
+        return JSON.parse(sessionData);
     } catch (e) {
-        console.error('セッションストレージからの取得に失敗しました。', e);
         return null;
     }
 }
 
-/**
- * ログアウト処理
- */
 function logout() {
-    try {
-        sessionStorage.removeItem('bloSkeUser');
-        if (firebaseAuth) {
-            firebaseAuth.signOut();
-        }
-    } catch (e) {
-        console.error('ログアウト処理に失敗しました。', e);
+    localStorage.removeItem(USER_SESSION_KEY);
+    // Googleログインしている場合はFirebaseからもログアウト
+    if (firebaseAuth && firebaseAuth.currentUser) {
+        firebaseAuth.signOut().catch(e => console.error('Firebase ログアウト失敗:', e));
     }
-    window.location.href = 'login.html';
+    alert('ログアウトしました。');
+    window.location.href = 'index.html'; // メイン画面に戻る
 }
 
-/**
- * 認証が必要なページかチェック
- * @param {boolean} redirectToLogin - 未認証時にlogin.htmlにリダイレクトするか
- */
-function authGuard(redirectToLogin = true) {
+// --- 認証ガード ---
+// (ページ読み込み時に実行し、未認証ならログイン画面へ)
+function authGuard() {
     const user = getUserSession();
     if (!user) {
-        if (redirectToLogin) {
-            alert('ログインが必要です。');
-            window.location.href = 'login.html';
+        alert('ログインが必要です。ログイン画面に移動します。');
+        // 保存（save）ボタンから来た場合の状態を保持
+        if (window.location.pathname.includes('edit.html')) {
+             sessionStorage.setItem('login_redirect_reason', 'save');
         }
-        return null;
+        window.location.href = `login.html`;
     }
-    return user;
 }
