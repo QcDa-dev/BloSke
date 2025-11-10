@@ -1,9 +1,50 @@
 /* BloSke (ブロスケ) 共通スクリプト */
 
+// --- Firebase SDK のインポート ---
+// (使用するHTMLファイル側で <script type="module"> としてインポートする必要があります)
+// (ただし、今回は script タグ直書きのため、グローバル関数として定義します)
+
+// Firebase SDK (CDN)
+// (各HTMLファイルで読み込む必要があります。ここでは common.js からの動的ロードは行いません)
+/*
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+*/
+
+// --- 定数 ---
+// 仕様書 4. APIエンドポイント
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxN0czK9zQ2uNLr-Avho6BCP8uci2yBedOeMqlvoqT5bPYlhQb38m4Wt3W1f6e5voyS/exec';
+
+// TODO: Firebase プロジェクトの設定に置き換えてください
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// --- Firebase 初期化 (グローバル変数) ---
+let firebaseApp;
+let firebaseAuth;
+let googleProvider;
+
+try {
+    if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        firebaseAuth = firebase.auth();
+        googleProvider = new firebase.auth.GoogleAuthProvider();
+    } else {
+        console.warn('Firebase SDKが読み込まれていないため、Google認証は使用できません。');
+    }
+} catch (e) {
+    console.error('Firebaseの初期化に失敗しました。設定情報を確認してください。', e);
+}
+
+
 /**
  * 共通UI（ヘッダー、フッター、ハンバーガーメニュー）を初期化します。
- * @param {string} appName - ヘッダーに表示するアプリ名。
- * @param {string} contactUrl - お問い合わせページのURL。
  */
 function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog') {
     // --- Font Awesome (アイコン用) ---
@@ -117,4 +158,146 @@ function setupModalClose(modalId, closeTriggerIds = []) {
             });
         }
     });
+}
+
+/**
+ * GAS API 呼び出しラッパー
+ * @param {string} action - GAS側で定義したアクション名
+ * @param {object} payload - 送信するデータ
+ * @returns {Promise<object>} - GASからのレスポンスデータ (data プロパティ)
+ */
+async function callGasApi(action, payload) {
+  // ローディングインジケーターを表示 (仮)
+  showLoadingSpinner(true); 
+
+  try {
+    const response = await fetch(GAS_API_URL, {
+      method: 'POST',
+      mode: 'cors',
+      cache: 'no-cache',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action, payload }),
+      redirect: 'follow',
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (result.success) {
+      return result.data; // 成功時は data プロパティを返す
+    } else {
+      // GAS側でエラーが捕捉された場合
+      throw new Error(result.message || '不明なサーバーエラーが発生しました。');
+    }
+  } catch (error) {
+    console.error('API呼び出しに失敗しました:', action, error);
+    // ユーザーにエラーを通知
+    alert(`エラーが発生しました: ${error.message}`);
+    throw error; // 呼び出し元でさらに処理できるようにエラーを再スロー
+  } finally {
+    // ローディングインジケーターを非表示 (仮)
+    showLoadingSpinner(false);
+  }
+}
+
+/**
+ * 簡易ローディングスピナーの表示/非表示
+ * (より堅牢な実装に置き換え推奨)
+ * @param {boolean} show - 表示するかどうか
+ */
+function showLoadingSpinner(show) {
+    let spinner = document.getElementById('global-spinner');
+    if (show) {
+        if (!spinner) {
+            spinner = document.createElement('div');
+            spinner.id = 'global-spinner';
+            spinner.style.position = 'fixed';
+            spinner.style.top = '50%';
+            spinner.style.left = '50%';
+            spinner.style.transform = 'translate(-50%, -50%)';
+            spinner.style.border = '5px solid #f3f3f3';
+            spinner.style.borderTop = '5px solid var(--main-color)';
+            spinner.style.borderRadius = '50%';
+            spinner.style.width = '40px';
+            spinner.style.height = '40px';
+            spinner.style.animation = 'spin 1s linear infinite';
+            spinner.style.zIndex = '9999';
+            document.body.appendChild(spinner);
+            
+            // スピナー用のアニメーション定義
+            if (!document.getElementById('spinner-style')) {
+                const style = document.createElement('style');
+                style.id = 'spinner-style';
+                style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+                document.head.appendChild(style);
+            }
+        }
+        spinner.style.display = 'block';
+    } else {
+        if (spinner) {
+            spinner.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * ユーザー情報をセッションストレージに保存
+ * @param {object} user - { username, email }
+ */
+function saveUserSession(user) {
+    try {
+        sessionStorage.setItem('bloSkeUser', JSON.stringify(user));
+    } catch (e) {
+        console.error('セッションストレージへの保存に失敗しました。', e);
+    }
+}
+
+/**
+ * セッションストレージからユーザー情報を取得
+ * @returns {object | null} - ユーザー情報またはnull
+ */
+function getUserSession() {
+    try {
+        const user = sessionStorage.getItem('bloSkeUser');
+        return user ? JSON.parse(user) : null;
+    } catch (e) {
+        console.error('セッションストレージからの取得に失敗しました。', e);
+        return null;
+    }
+}
+
+/**
+ * ログアウト処理
+ */
+function logout() {
+    try {
+        sessionStorage.removeItem('bloSkeUser');
+        if (firebaseAuth) {
+            firebaseAuth.signOut();
+        }
+    } catch (e) {
+        console.error('ログアウト処理に失敗しました。', e);
+    }
+    window.location.href = 'login.html';
+}
+
+/**
+ * 認証が必要なページかチェック
+ * @param {boolean} redirectToLogin - 未認証時にlogin.htmlにリダイレクトするか
+ */
+function authGuard(redirectToLogin = true) {
+    const user = getUserSession();
+    if (!user) {
+        if (redirectToLogin) {
+            alert('ログインが必要です。');
+            window.location.href = 'login.html';
+        }
+        return null;
+    }
+    return user;
 }
