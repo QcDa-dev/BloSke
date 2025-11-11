@@ -45,7 +45,6 @@ try {
  */
 function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog') {
     // --- Font Awesome (アイコン用) ---
-    // 開発を容易にするため、Font Awesomeを動的に読み込みます。
     if (!document.querySelector('link[href*="font-awesome"]')) {
         const faLink = document.createElement('link');
         faLink.rel = 'stylesheet';
@@ -161,7 +160,7 @@ function setupModalClose(modalId, cancelSelector) {
 }
 
 /**
- * GAS API 呼び出しラッパー
+ * ★★★ 修正: GAS API 呼び出しラッパー (JSONP方式) ★★★
  * @param {string} action - GAS側で定義したアクション名
  * @param {object} payload - 送信するデータ
  * @returns {Promise<object>} - GASからのレスポンスデータ (data プロパティ)
@@ -169,56 +168,80 @@ function setupModalClose(modalId, cancelSelector) {
 async function callGasApi(action, payload) {
   showLoadingSpinner(true); 
 
-  try {
-    const formData = new URLSearchParams();
-    formData.append('action', action);
-    formData.append('payload', JSON.stringify(payload)); 
+  // 1. ユニークなコールバック関数名を生成
+  const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
 
-    const response = await fetch(GAS_API_URL, {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-      },
-      body: formData,
-      // ★★★ 修正: リダイレクトをエラーとして扱う ★★★
-      // GASが認証のために302リダイレクトを返した場合、CORSエラーではなく
-      // fetch自体がエラーをスローするように設定
-      redirect: 'error' 
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
-    }
-
-    const result = await response.json();
-
-    if (result.success) {
-      return result.data;
-    } else {
-      // GAS側でsuccess: falseが返された場合
-      throw new Error(result.message || '不明なサーバーエラーが発生しました。');
-    }
-
-  } catch (error) {
-    console.error('API呼び出しに失敗しました:', action, error);
+  // 2. Promiseを作成
+  return new Promise((resolve, reject) => {
     
-    // ★★★ 修正: リダイレクトエラー時の専用メッセージ ★★★
-    if (error.message.includes('redirect')) {
-        alert('エラー: サーバーとの認証に失敗しました。GASのデプロイ（アクセス権限）を再確認してください。');
-    } else {
-        alert(`エラー: ${error.message}`);
+    // 3. グローバルコールバック関数を定義
+    window[callbackName] = (result) => {
+      // 7. レスポンスを処理
+      cleanup();
+      if (result.success) {
+        resolve(result.data);
+      } else {
+        const errorMsg = result.message || '不明なサーバーエラーが発生しました。';
+        console.error('API呼び出しに失敗しました:', action, errorMsg);
+        alert(`エラー: ${errorMsg}`);
+        reject(new Error(errorMsg));
+      }
+    };
+
+    // 4. <script> タグを作成
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+
+    // 5. URLを構築
+    const params = new URLSearchParams();
+    params.append('action', action);
+    params.append('payload', JSON.stringify(payload));
+    params.append('callback', callbackName);
+    
+    const url = `${GAS_API_URL}?${params.toString()}`;
+
+    // URL長チェック (GETリクエストの制限)
+    if (url.length > 2000) {
+        const errorMsg = 'リクエストデータが長すぎます。';
+        console.error('API呼び出し失敗:', action, errorMsg);
+        alert(`エラー: ${errorMsg}`);
+        cleanup();
+        reject(new Error(errorMsg));
+        return;
     }
     
-    throw error; // 呼び出し元でキャッチできるように再スロー
-  
-  } finally {
-    showLoadingSpinner(false);
-  }
+    script.src = url;
+
+    // タイムアウトとエラーハンドリング
+    let timeoutId = null;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (document.body.contains(script)) {
+          document.body.removeChild(script);
+      }
+      delete window[callbackName];
+      showLoadingSpinner(false);
+    };
+
+    script.onerror = () => {
+      const errorMsg = 'GASスクリプトの読み込みに失敗しました。URL、ネットワーク、またはGASのデプロイ（「全員」アクセス）を確認してください。';
+      console.error('API呼び出し失敗:', action, errorMsg);
+      alert(`エラー: ${errorMsg}`);
+      cleanup();
+      reject(new Error(errorMsg));
+    };
+    
+    timeoutId = setTimeout(() => {
+        script.onerror(); // タイムアウト時もonerrorをトリガー
+    }, 15000); // 15秒タイムアウト
+
+    // 6. スクリプトをDOMに追加してリクエスト開始
+    document.body.appendChild(script);
+  });
 }
 
 // --- ローディングスピナー (仮) ---
-// TODO: より良いUIに置き換える
 function showLoadingSpinner(show) {
     if (show) {
         console.log("... (Loading) ...");
@@ -258,12 +281,10 @@ function logout() {
 }
 
 // --- 認証ガード ---
-// (ページ読み込み時に実行し、未認証ならログイン画面へ)
 function authGuard() {
     const user = getUserSession();
     if (!user) {
         alert('ログインが必要です。ログイン画面に移動します。');
-        // 保存（save）ボタンから来た場合の状態を保持
         if (window.location.pathname.includes('edit.html')) {
              sessionStorage.setItem('login_redirect_reason', 'save');
         }
