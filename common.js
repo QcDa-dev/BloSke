@@ -45,6 +45,7 @@ try {
  */
 function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog') {
     // --- Font Awesome (アイコン用) ---
+    // 開発を容易にするため、Font Awesomeを動的に読み込みます。
     if (!document.querySelector('link[href*="font-awesome"]')) {
         const faLink = document.createElement('link');
         faLink.rel = 'stylesheet';
@@ -166,21 +167,25 @@ function setupModalClose(modalId, cancelSelector) {
  * @returns {Promise<object>} - GASからのレスポンスデータ (data プロパティ)
  */
 async function callGasApi(action, payload) {
-  // ローディングインジケーターを表示 (仮)
   showLoadingSpinner(true); 
 
   try {
+    // ★★★ 修正 (問題1, 2): bodyをURLSearchParamsに変更 ★★★
+    const formData = new URLSearchParams();
+    formData.append('action', action);
+    formData.append('payload', JSON.stringify(payload)); // payload自体はJSON文字列として送信
+
     const response = await fetch(GAS_API_URL, {
       method: 'POST',
       mode: 'cors',
-      // ★★★ 修正 (問題1, 2): cache と Content-Type ヘッダーを削除 ★★★
-      // ブラウザに「シンプルリクエスト」として扱わせ、CORSプリフライトを回避する
-      // cache: 'no-cache', // 削除
-      // headers: { // 削除
-      //   'Content-Type': 'text/plain;charset=utf-8', 
-      // },
-      body: JSON.stringify({ action, payload }),
+      // ★★★ 修正 (問題1, 2): Content-Type を 'application/x-www-form-urlencoded' に変更 ★★★
+      // これにより「シンプルリクエスト」となり、CORSプリフライト(OPTIONS)が回避される
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+      },
+      body: formData,
     });
+    // ★★★ 修正ここまで ★★★
 
     if (!response.ok) {
       throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
@@ -201,7 +206,6 @@ async function callGasApi(action, payload) {
     throw error; // 呼び出し元でキャッチできるように再スロー
   
   } finally {
-    // ローディングインジケーターを非表示 (仮)
     showLoadingSpinner(false);
   }
 }
