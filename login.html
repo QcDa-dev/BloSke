@@ -53,7 +53,7 @@
     <!-- 共通スクリプト (API連携) -->
     <script src="common.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const loginForm = document.getElementById('login-form');
             const googleLoginBtn = document.getElementById('google-login-btn');
 
@@ -67,6 +67,37 @@
                     window.location.href = 'projects.html'; // デフォルトはプロジェクト一覧へ
                 }
             };
+
+            // ★★★ 修正 (問題1): Googleリダイレクト認証の結果を処理 ★★★
+            if (firebaseAuth) {
+                try {
+                    const result = await firebaseAuth.getRedirectResult();
+                    if (result && result.user) {
+                        const user = result.user;
+                        
+                        // Firebase認証成功後、GAS APIでDB（Sheets）に照合/登録
+                        const data = await callGasApi('loginUser', {
+                            authType: 'google',
+                            email: user.email,
+                            accountName: user.displayName || user.email // アカウント名
+                        });
+                        
+                        // ログイン成功
+                        saveUserSession(data.user);
+                        alert('ログインしました。');
+                        redirectAfterLogin();
+                        return; // 処理完了
+                    }
+                } catch (error) {
+                    // (auth/web-storage-unsupported はiPhoneのプライベートモードなどで発生するが、無視してよい)
+                    if (error.code !== 'auth/web-storage-unsupported' && error.code !== 'auth/internal-error') { 
+                        console.error('Googleリダイレクト処理失敗:', error);
+                        alert(`Google認証に失敗しました: ${error.message}`);
+                    }
+                }
+            }
+            // ★★★ 修正ここまで ★★★
+
 
             // オリジナルIDでのログイン (仕様書 4.1)
             loginForm.addEventListener('submit', async (e) => {
@@ -92,7 +123,7 @@
                 }
             });
 
-            // Googleでのログイン (仕様書 4.1)
+            // ★★★ 修正 (問題1): Googleでのログイン (PopupからRedirectに変更) ★★★
             googleLoginBtn.addEventListener('click', async () => {
                 if (!firebaseAuth || !googleProvider) {
                     alert('Google認証の初期化に失敗しました。');
@@ -100,29 +131,13 @@
                 }
                 
                 try {
-                    const result = await firebaseAuth.signInWithPopup(googleProvider);
-                    const user = result.user;
+                    // Popupの代わりにRedirectを開始
+                    await firebaseAuth.signInWithRedirect(googleProvider);
+                    // この後、Googleの認証画面に遷移し、認証後にこのページに戻ってくる
                     
-                    // Firebase認証成功後、GAS APIでDB（Sheets）に照合/登録
-                    const data = await callGasApi('loginUser', {
-                        authType: 'google',
-                        email: user.email,
-                        accountName: user.displayName || user.email // アカウント名
-                    });
-                    
-                    // ログイン成功
-                    saveUserSession(data.user);
-                    alert('ログインしました。');
-                    redirectAfterLogin();
-
                 } catch (error) {
-                    // callGasApiのエラーは内部でalertされる
-                    if (error.code !== 'auth/popup-closed-by-user') {
-                         console.error('Googleログイン失敗:', error);
-                         if (!error.message.includes('HTTPエラー')) {
-                            alert(`Google認証に失敗しました: ${error.message}`);
-                         }
-                    }
+                    console.error('Googleリダイレクト開始失敗:', error);
+                    alert(`Google認証の開始に失敗しました: ${error.message}`);
                 }
             });
         });
