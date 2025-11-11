@@ -170,22 +170,22 @@ async function callGasApi(action, payload) {
   showLoadingSpinner(true); 
 
   try {
-    // ★★★ 修正 (問題1, 2): bodyをURLSearchParamsに変更 ★★★
     const formData = new URLSearchParams();
     formData.append('action', action);
-    formData.append('payload', JSON.stringify(payload)); // payload自体はJSON文字列として送信
+    formData.append('payload', JSON.stringify(payload)); 
 
     const response = await fetch(GAS_API_URL, {
       method: 'POST',
       mode: 'cors',
-      // ★★★ 修正 (問題1, 2): Content-Type を 'application/x-www-form-urlencoded' に変更 ★★★
-      // これにより「シンプルリクエスト」となり、CORSプリフライト(OPTIONS)が回避される
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
       },
       body: formData,
+      // ★★★ 修正: リダイレクトをエラーとして扱う ★★★
+      // GASが認証のために302リダイレクトを返した場合、CORSエラーではなく
+      // fetch自体がエラーをスローするように設定
+      redirect: 'error' 
     });
-    // ★★★ 修正ここまで ★★★
 
     if (!response.ok) {
       throw new Error(`HTTPエラー: ${response.status} ${response.statusText}`);
@@ -202,7 +202,14 @@ async function callGasApi(action, payload) {
 
   } catch (error) {
     console.error('API呼び出しに失敗しました:', action, error);
-    alert(`エラー: ${error.message}`);
+    
+    // ★★★ 修正: リダイレクトエラー時の専用メッセージ ★★★
+    if (error.message.includes('redirect')) {
+        alert('エラー: サーバーとの認証に失敗しました。GASのデプロイ（アクセス権限）を再確認してください。');
+    } else {
+        alert(`エラー: ${error.message}`);
+    }
+    
     throw error; // 呼び出し元でキャッチできるように再スロー
   
   } finally {
