@@ -8,7 +8,7 @@
 // --- 定数 ---
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxN0czK9zQ2uNLr-Avho6BCP8uci2yBedOeMqlvoqT5bPYlhQb38m4Wt3W1f6e5voyS/exec';
 
-// TODO: Firebase プロジェクトの設定に置き換えてください
+// --- Firebase 設定 (お客様のキー) ---
 const firebaseConfig = {
   apiKey: "AIzaSyD8rQk_RyvRovSqe7O3kFj7CKsumt1phyQ",
   authDomain: "bloske-50c88.firebaseapp.com",
@@ -27,6 +27,11 @@ try {
     if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
         firebaseApp = firebase.initializeApp(firebaseConfig);
         firebaseAuth = firebase.auth();
+        
+        // ★★★ 修正 (問題3 COOP対策) ★★★
+        // ポップアップの持続性をセッションのみにし、COOPポリシーによるエラーを回避
+        firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.NONE); 
+        
         googleProvider = new firebase.auth.GoogleAuthProvider();
     } else {
         console.warn('Firebase SDKが読み込まれていないため、Google認証は使用できません。');
@@ -74,7 +79,7 @@ function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/
             <nav>
                 <ul>
                     <li><a href="guide.html" target="_blank"><i class="fa-solid fa-book-open fa-fw"></i> 使い方ガイド</a></li>
-                    <li><a href="https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
+                    <li><a href="${contactUrl}" target="_blank"><i class="fa-solid fa-envelope fa-fw"></i> お問い合わせ</a></li>
                     <li><a href="release-notes.html" target="_blank"><i class="fa-solid fa-bullhorn fa-fw"></i> リリースノート</a></li>
                 </ul>
                 <div class="menu-divider"></div>
