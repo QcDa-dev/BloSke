@@ -300,8 +300,10 @@
                 // 2. Canvasサイズ設定
                 totalDurationMs = maxTimeMs - minTimeMs;
                 const minCanvasWidth = canvasContainer.clientWidth;
-                // ピクセル/ms の計算 (最低でも 800px 幅になるように)
-                const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000))); // 4時間で800px相当
+                
+                // ★★★ 修正: 構文エラー (余分な括弧) を削除 ★★★
+                const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000)); // 4時間で800px相当
+                
                 const canvasWidth = Math.max(minCanvasWidth, calculatedWidth) + H_PADDING * 2;
                 const canvasHeight = Math.max(400, (layoutRowCount * ROW_HEIGHT) + V_PADDING * 2);
 
