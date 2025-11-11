@@ -68,12 +68,15 @@
                 }
             };
 
-            // ★★★ 修正 (問題1): Googleリダイレクト認証の結果を処理 ★★★
+            // ★★★ 修正 (問題3): Googleリダイレクト認証の結果を処理 ★★★
             if (firebaseAuth) {
                 try {
+                    // ページ読み込み時にリダイレクト結果をチェック
                     const result = await firebaseAuth.getRedirectResult();
                     if (result && result.user) {
+                        // Google認証から戻ってきた場合
                         const user = result.user;
+                        console.log('Google Redirect Result:', user); // デバッグ用
                         
                         // Firebase認証成功後、GAS APIでDB（Sheets）に照合/登録
                         const data = await callGasApi('loginUser', {
@@ -88,11 +91,16 @@
                         redirectAfterLogin();
                         return; // 処理完了
                     }
+                    // result が null の場合は、リダイレクトからの戻りではない（＝通常のページ訪問）
+                    
                 } catch (error) {
-                    // (auth/web-storage-unsupported はiPhoneのプライベートモードなどで発生するが、無視してよい)
+                    // (auth/web-storage-unsupported はiPhoneのプライベートモードなどで発生する)
                     if (error.code !== 'auth/web-storage-unsupported' && error.code !== 'auth/internal-error') { 
                         console.error('Googleリダイレクト処理失敗:', error);
-                        alert(`Google認証に失敗しました: ${error.message}`);
+                        // callGasApi のエラーは callGasApi 内部で alert される
+                        if (!error.message.includes('HTTPエラー')) {
+                           alert(`Google認証に失敗しました: ${error.message}`);
+                        }
                     }
                 }
             }
@@ -123,7 +131,7 @@
                 }
             });
 
-            // ★★★ 修正 (問題1): Googleでのログイン (PopupからRedirectに変更) ★★★
+            // ★★★ 修正 (問題3): Googleでのログイン (PopupからRedirectに変更) ★★★
             googleLoginBtn.addEventListener('click', async () => {
                 if (!firebaseAuth || !googleProvider) {
                     alert('Google認証の初期化に失敗しました。');
