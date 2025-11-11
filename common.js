@@ -180,7 +180,8 @@ async function callGasApi(action, payload) {
         'Content-Type': 'text/plain;charset=utf-8', 
       },
       body: JSON.stringify({ action, payload }),
-      redirect: 'follow',
+      // ★★★ 修正 (問題1, 2): redirect: 'follow' を削除 ★★★
+      // これがGoogleログインページへのリダイレクトを引き起こし、CORSエラーの原因になっていた
     });
 
     if (!response.ok) {
