@@ -28,7 +28,6 @@ try {
         firebaseApp = firebase.initializeApp(firebaseConfig);
         firebaseAuth = firebase.auth();
         
-        // ★★★ 修正 (問題3 COOP対策) ★★★
         // ポップアップの持続性をセッションのみにし、COOPポリシーによるエラーを回避
         firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.NONE); 
         
@@ -46,7 +45,6 @@ try {
  */
 function initCommonUI(appName = 'BloSke', contactUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSefD80Xc29vUb9uEsRtKbiihTnwYDmVKRhIIMkV3L8jMCRMBQ/viewform?usp=dialog') {
     // --- Font Awesome (アイコン用) ---
-    // 開発を容易にするため、Font Awesomeを動的に読み込みます。
     if (!document.querySelector('link[href*="font-awesome"]')) {
         const faLink = document.createElement('link');
         faLink.rel = 'stylesheet';
@@ -175,13 +173,13 @@ async function callGasApi(action, payload) {
     const response = await fetch(GAS_API_URL, {
       method: 'POST',
       mode: 'cors',
-      cache: 'no-cache',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', 
-      },
+      // ★★★ 修正 (問題1, 2): cache と Content-Type ヘッダーを削除 ★★★
+      // ブラウザに「シンプルリクエスト」として扱わせ、CORSプリフライトを回避する
+      // cache: 'no-cache', // 削除
+      // headers: { // 削除
+      //   'Content-Type': 'text/plain;charset=utf-8', 
+      // },
       body: JSON.stringify({ action, payload }),
-      // ★★★ 修正 (問題1, 2): redirect: 'follow' を削除 ★★★
-      // これがGoogleログインページへのリダイレクトを引き起こし、CORSエラーの原因になっていた
     });
 
     if (!response.ok) {
