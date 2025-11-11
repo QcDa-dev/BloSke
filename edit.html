@@ -73,7 +73,8 @@
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label for="block-start-time">開始時刻</label>
-                        <input type="time" id="block-start-time" class="form-input" step="300" required> <!-- 5分単位 -->
+                        <!-- ★★★ 修正 (問題2): step="300" を削除 ★★★ -->
+                        <input type="time" id="block-start-time" class="form-input" required>
                     </div>
                 </div>
                 
@@ -84,7 +85,8 @@
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label for="block-end-time">終了時刻</label>
-                        <input type="time" id="block-end-time" class="form-input" step="300" required> <!-- 5分単位 -->
+                        <!-- ★★★ 修正 (問題2): step="300" を削除 ★★★ -->
+                        <input type="time" id="block-end-time" class="form-input" required>
                     </div>
                 </div>
 
@@ -116,23 +118,30 @@
             const canvas = document.getElementById('timetableCanvas');
             const ctx = canvas.getContext('2d');
 
+            // ★★★ 修正 (問題1): ブロックデータをグローバルに管理 ★★★
+            let projectBlocks = [];
+            let currentProjectName = '新規プロジェクト';
+
             // --- プロジェクト名設定 ---
             const urlParams = new URLSearchParams(window.location.search);
             const loadedCsvData = sessionStorage.getItem('bloske_loaded_csv');
             
             if (loadedCsvData) {
                 // プロジェクト一覧から読み込まれた場合
-                // TODO: CSVデータをパースしてプロジェクト名を設定
-                projectNameEl.textContent = sessionStorage.getItem('bloske_current_project_name') || '読み込みプロジェクト';
-                sessionStorage.removeItem('bloske_loaded_csv'); // 一度使ったら削除
+                currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '読み込みプロジェクト';
+                // TODO: CSVデータをパースして projectBlocks に設定
+                // projectBlocks = parseCsv(loadedCsvData); 
+                sessionStorage.removeItem('bloske_loaded_csv'); 
+                sessionStorage.removeItem('bloske_current_project_name');
             } else if (urlParams.has('restore')) {
                 // ローカルストレージから復元する場合
-                // TODO: ローカルデータをパースしてプロジェクト名を設定
-                projectNameEl.textContent = '復元したプロジェクト';
+                loadFromLocalStorage();
             } else {
                 // 新規作成の場合
-                projectNameEl.textContent = sessionStorage.getItem('bloske_current_project_name') || '新規プロジェクト';
+                currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '新規プロジェクト';
+                sessionStorage.removeItem('bloske_current_project_name');
             }
+            projectNameEl.textContent = currentProjectName;
 
             // --- モーダル設定 ---
             setupModalClose('block-edit-modal', '#cancel-block-edit-btn');
@@ -167,35 +176,95 @@
                 colorPicker.appendChild(colorCircle);
             });
 
-            // --- Canvas初期描画 ---
+            // --- Canvas描画 ---
             function drawCanvas() {
-                // コンテナの幅に合わせる
                 const width = canvasContainer.clientWidth;
-                // TODO: ブロックの数に応じて高さを動的に変更
-                const height = 400; 
+                const height = 400; // TODO: 高さを動的に
                 
                 canvas.width = width;
                 canvas.height = height;
 
                 ctx.clearRect(0, 0, width, height);
 
-                // TODO: ブロック描画ロジック (仕様書 3.2.2)
-                const blocks = []; // TODO: 本物のデータ管理
-
-                if (blocks.length === 0) {
+                if (projectBlocks.length === 0) {
                     // 空表示 (仕様書 3.2.2)
                     ctx.fillStyle = '#adb5bd';
                     ctx.font = '16px sans-serif';
                     ctx.textAlign = 'center';
                     ctx.fillText('イベントが1つも登録されていません。', width / 2, height / 2);
-                } else {
-                    // TODO: 時間軸とブロックの描画
+                    return;
                 }
+
+                // ★★★ 修正 (問題1): ブロックの簡易描画 (デバッグ用) ★★★
+                // 本来は仕様書に基づき時間軸を描画
+                ctx.fillStyle = '#333';
+                ctx.font = '16px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(`ブロック数: ${projectBlocks.length} (Canvas描画は未実装です)`, 20, 40);
+
+                projectBlocks.forEach((block, index) => {
+                    ctx.fillStyle = block.color;
+                    ctx.fillRect(20, 60 + (index * 40), 200, 30);
+                    ctx.fillStyle = '#ffffff'; // テキスト色
+                    ctx.font = '14px sans-serif';
+                    ctx.fillText(block.name, 30, 80 + (index * 40));
+                });
             }
             
-            // ウィンドウリサイズ時にも再描画
             window.addEventListener('resize', drawCanvas);
             drawCanvas(); // 初期描画
+
+            // --- ★★★ 修正 (問題1): ブロック追加ロジック ★★★
+            document.getElementById('block-edit-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                // フォームから値を取得
+                const name = document.getElementById('block-name').value;
+                const startDate = document.getElementById('block-start-date').value;
+                const startTime = document.getElementById('block-start-time').value;
+                const endDate = document.getElementById('block-end-date').value;
+                const endTime = document.getElementById('block-end-time').value;
+                const color = document.getElementById('block-color').value;
+
+                // バリデーション (簡易)
+                if (!name || !startDate || !startTime || !endDate || !endTime) {
+                    alert('すべての日時を入力してください。');
+                    return;
+                }
+
+                // ISO文字列に変換 (仕様書 6.1 CSV形式)
+                const startISO = new Date(`${startDate}T${startTime}`).toISOString();
+                const endISO = new Date(`${endDate}T${endTime}`).toISOString();
+
+                if (new Date(endISO) <= new Date(startISO)) {
+                    alert('終了日時は開始日時より後に設定してください。');
+                    return;
+                }
+
+                // ブロックオブジェクトを作成
+                const newBlock = {
+                    id: Date.now().toString(), // 簡易ID
+                    name: name,
+                    startISO: startISO,
+                    endISO: endISO,
+                    color: color
+                };
+
+                // TODO: 編集モードの場合は既存のブロックを更新
+                
+                // 配列に追加
+                projectBlocks.push(newBlock);
+                
+                // ローカルストレージに保存 (仕様書 3.2.2)
+                saveToLocalStorage();
+                
+                // Canvas再描画
+                drawCanvas();
+                
+                // モーダルを閉じる
+                hideModal('block-edit-modal');
+            });
+
 
             // --- ボタンイベントリスナー ---
             
@@ -203,6 +272,17 @@
             document.getElementById('add-block-btn').addEventListener('click', () => {
                 document.getElementById('block-modal-title').textContent = 'ブロック追加';
                 document.getElementById('block-edit-form').reset();
+                document.getElementById('block-id').value = ''; // 新規モード
+                
+                // 日付/時刻のデフォルト値を設定 (現在)
+                const now = new Date();
+                const yyyyMMdd = now.toISOString().split('T')[0];
+                const hhMM = now.toTimeString().substring(0, 5);
+                document.getElementById('block-start-date').value = yyyyMMdd;
+                document.getElementById('block-start-time').value = hhMM;
+                document.getElementById('block-end-date').value = yyyyMMdd;
+                document.getElementById('block-end-time').value = hhMM;
+
                 // カラーピッカーの選択状態をリセット
                 blockColorInput.value = colors[0];
                  Array.from(colorPicker.children).forEach((child, index) => {
@@ -228,8 +308,12 @@
 
             async function saveProjectData(username) {
                 const projectName = projectNameEl.textContent;
-                // TODO: 現在のブロックデータからCSVを生成
-                const csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n会議A,2025-11-10T10:00:00,2025-11-10T11:00:00,#FF0000"; // ダミー
+                
+                // ★★★ 修正 (問題1): ブロックデータからCSVを生成 ★★★
+                let csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; // ヘッダー
+                projectBlocks.forEach(block => {
+                    csvData += `"${block.name}","${block.startISO}","${block.endISO}","${block.color}"\n`;
+                });
                 
                 if (!confirm(`プロジェクト「${projectName}」を保存しますか？`)) {
                     return;
@@ -242,8 +326,33 @@
                         csvData: csvData
                     });
                     alert('保存しました。');
+                    // 保存に成功したらローカルストレージは不要
+                    localStorage.removeItem('bloske_local_project');
                 } catch (error) {
                     console.error('保存失敗:', error);
+                }
+            }
+
+            // --- ローカルストレージ機能 ---
+            function saveToLocalStorage() {
+                const data = {
+                    name: projectNameEl.textContent,
+                    blocks: projectBlocks
+                };
+                localStorage.setItem('bloske_local_project', JSON.stringify(data));
+            }
+            
+            function loadFromLocalStorage() {
+                try {
+                    const dataStr = localStorage.getItem('bloske_local_project');
+                    if (!dataStr) return;
+                    
+                    const data = JSON.parse(dataStr);
+                    projectNameEl.textContent = data.name || '復元プロジェクト';
+                    projectBlocks = data.blocks || [];
+                } catch (e) {
+                    console.error('ローカルストレージの復元に失敗:', e);
+                    localStorage.removeItem('bloske_local_project');
                 }
             }
 
