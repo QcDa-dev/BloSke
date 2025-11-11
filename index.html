@@ -16,19 +16,63 @@
     <!-- Firebase SDK (common.js より先に読み込む) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
+    <!-- ★★★ 修正 (問題4): 以前のスタイルに戻す ★★★ -->
+    <style>
+        /* index.html 専用のウェルカムスタイル */
+        .welcome-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+            height: calc(100vh - var(--header-height) - var(--footer-height)); /* ヘッダー/フッターを除く全高 */
+            box-sizing: border-box;
+        }
+        .welcome-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--main-color);
+            margin-bottom: 15px;
+        }
+        .welcome-subtitle {
+            font-size: 1.1rem;
+            color: #555;
+            margin-bottom: 40px;
+            max-width: 500px;
+        }
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+        }
+        .action-buttons .btn {
+            width: 80%;
+            max-width: 300px;
+            padding: 15px;
+            font-size: 1.1rem;
+        }
+    </style>
 </head>
 <body>
 
     <main>
-        <div class="container text-center" style="padding-top: 50px;">
-            <h1 style="font-size: 2.5rem; color: var(--main-color); font-weight: 700;">ようこそ、BloSke (ブロスケ)へ</h1>
-            <p style="font-size: 1.1rem; color: #555; margin-bottom: 40px;">直感的なタイムテーブル作成アプリ</p>
+        <!-- ★★★ 修正 (問題4): 以前のレイアウトに戻す ★★★ -->
+        <div class="welcome-container">
+            <h1 class="welcome-title">BloSkeへようこそ</h1>
+            <p class="welcome-subtitle">
+                直感的な操作で、イベント、会議、個人の学習計画など、
+                あらゆるタイムテーブルを簡単に作成・共有できます。
+            </p>
             
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-                <button id="new-project-btn" class="btn btn-primary" style="width: 80%; max-width: 300px; padding: 15px;">
+            <div class="action-buttons">
+                <button id="new-project-btn" class="btn btn-primary">
                     <i class="fa-solid fa-plus"></i> 新規作成
                 </button>
-                <button id="load-project-btn" class="btn btn-secondary" style="width: 80%; max-width: 300px; padding: 15px;">
+                <button id="load-project-btn" class="btn btn-secondary">
                     <i class="fa-solid fa-folder-open"></i> 保存済みプロジェクト
                 </button>
             </div>
@@ -60,7 +104,6 @@
             initCommonUI('BloSke');
 
             // --- ローカル保存データチェック (仕様書 3.2.1) ---
-            // (ローカル保存の実装は edit.html 側で行う)
             const localData = localStorage.getItem('bloske_local_project');
             if (localData) {
                 if (confirm('編集中のプロジェクトデータが見つかりました。復元しますか？')) {
