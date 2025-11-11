@@ -57,9 +57,37 @@
     <!-- 共通スクリプト (API連携) -->
     <script src="common.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const registerForm = document.getElementById('register-form');
             const googleRegisterBtn = document.getElementById('google-register-btn');
+
+            // ★★★ 修正 (問題1): Googleリダイレクト認証の結果を処理 ★★★
+             if (firebaseAuth) {
+                try {
+                    const result = await firebaseAuth.getRedirectResult();
+                    if (result && result.user) {
+                        const user = result.user;
+                        
+                        // Firebase認証成功後、GAS APIでDB（Sheets）に登録
+                        const data = await callGasApi('registerUser', {
+                            authType: 'google',
+                            email: user.email,
+                            accountName: user.displayName || user.email // アカウント名
+                        });
+                        
+                        alert(data.message || '登録が完了しました。ログイン画面に移動します。');
+                        window.location.href = 'login.html';
+                        return; // 処理完了
+                    }
+                } catch (error) {
+                    if (error.code !== 'auth/web-storage-unsupported' && error.code !== 'auth/internal-error') { 
+                        console.error('Googleリダイレクト処理失敗:', error);
+                        alert(`Google認証に失敗しました: ${error.message}`);
+                    }
+                }
+            }
+            // ★★★ 修正ここまで ★★★
+
 
             // オリジナルIDでの登録 (仕様書 4.1)
             registerForm.addEventListener('submit', async (e) => {
@@ -84,7 +112,7 @@
                 }
             });
 
-            // Googleでの登録 (仕様書 4.1)
+            // ★★★ 修正 (問題1): Googleでの登録 (PopupからRedirectに変更) ★★★
             googleRegisterBtn.addEventListener('click', async () => {
                 if (!firebaseAuth || !googleProvider) {
                     alert('Google認証の初期化に失敗しました。');
@@ -92,26 +120,13 @@
                 }
                 
                 try {
-                    const result = await firebaseAuth.signInWithPopup(googleProvider);
-                    const user = result.user;
-                    
-                    // Firebase認証成功後、GAS APIでDB（Sheets）に登録
-                    const data = await callGasApi('registerUser', {
-                        authType: 'google',
-                        email: user.email,
-                        accountName: user.displayName || user.email // アカウント名
-                    });
-                    
-                    alert(data.message || '登録が完了しました。ログイン画面に移動します。');
-                    window.location.href = 'login.html';
+                    // Popupの代わりにRedirectを開始
+                    await firebaseAuth.signInWithRedirect(googleProvider);
+                    // この後、Googleの認証画面に遷移し、認証後にこのページに戻ってくる
 
                 } catch (error) {
-                    if (error.code !== 'auth/popup-closed-by-user') {
-                         console.error('Google登録失敗:', error);
-                         if (!error.message.includes('HTTPエラー')) {
-                            alert(`Google認証に失敗しました: ${error.message}`);
-                         }
-                    }
+                     console.error('Googleリダイレクト開始失敗:', error);
+                     alert(`Google認証の開始に失敗しました: ${error.message}`);
                 }
             });
         });
