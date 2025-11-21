@@ -163,6 +163,7 @@
             let dragOriginalEndMs = 0;
             let dragOffsetY = 0; // マウスとブロック上端の差分
             let dragCurrentY = 0; // 現在のドラッグY位置
+            let dragOriginalRow = 0; // ドラッグ開始時の行
 
             // アプリロゴ画像 (出力用)
             const appIcon = new Image();
@@ -177,12 +178,15 @@
                     const line = lines[i];
                     const parts = line.split(',').map(part => part.trim().replace(/"/g, ''));
                     if (parts.length >= 4) {
+                        // CSVからの読み込み時、layoutRowが含まれていない場合は自動計算用フラグ
+                        // 仕様書 6.1にはlayoutRowがないため、最初は未定義になる
                         blocks.push({
                             id: Date.now().toString() + i,
                             name: parts[0],
                             startISO: parts[1],
                             endISO: parts[2],
-                            color: parts[3]
+                            color: parts[3],
+                            layoutRow: -1 // 未定義状態
                         });
                     }
                 }
@@ -211,7 +215,49 @@
                 localStorage.setItem('bloske_local_project', JSON.stringify(data));
             }
 
-            // --- 2. Canvas描画ロジック ---
+            // --- 2. レイアウトロジック (修正版) ---
+
+            // 指定したブロックが配置可能な最も上の行を探す (初期配置用)
+            function findAvailableRow(targetBlock) {
+                const targetStart = new Date(targetBlock.startISO).getTime();
+                const targetEnd = new Date(targetBlock.endISO).getTime();
+                
+                let row = 0;
+                while (true) {
+                    // この行にある他のブロックと重なるかチェック
+                    const conflict = projectBlocks.some(other => {
+                        if (other === targetBlock || other.layoutRow !== row) return false;
+                        const otherStart = new Date(other.startISO).getTime();
+                        const otherEnd = new Date(other.endISO).getTime();
+                        return targetStart < otherEnd && targetEnd > otherStart;
+                    });
+
+                    if (!conflict) return row;
+                    row++;
+                }
+            }
+
+            // 未配置のブロックに行を割り当てる (初期読み込み時など)
+            function assignLayoutRows() {
+                projectBlocks.forEach(block => {
+                    if (typeof block.layoutRow === 'undefined' || block.layoutRow === -1) {
+                        block.layoutRow = findAvailableRow(block);
+                    }
+                });
+            }
+
+            // 全体の行数を計算
+            function calculateRowCount() {
+                let maxRow = -1;
+                projectBlocks.forEach(block => {
+                    if (block.layoutRow > maxRow) maxRow = block.layoutRow;
+                });
+                // 少なくとも1行、またはブロックの最大行 + 1
+                // ドラッグで行を増やすための余白を考慮して +1 する
+                layoutRowCount = Math.max(1, maxRow + 2); 
+            }
+
+            // --- Canvas描画ロジック ---
 
             function updateTimelineBounds() {
                 if (projectBlocks.length === 0) {
@@ -255,33 +301,6 @@
                 }
             }
 
-            function calculateBlockLayout() {
-                const sortedBlocks = [...projectBlocks].sort((a, b) => new Date(a.startISO).getTime() - new Date(b.startISO).getTime());
-                
-                const rows = []; 
-                layoutRowCount = 0;
-
-                for (const block of sortedBlocks) {
-                    const blockStart = new Date(block.startISO).getTime();
-                    let placed = false;
-
-                    for (let i = 0; i < rows.length; i++) {
-                        if (blockStart >= rows[i]) { 
-                            rows[i] = new Date(block.endISO).getTime(); 
-                            block.layoutRow = i; 
-                            placed = true;
-                            break;
-                        }
-                    }
-
-                    if (!placed) {
-                        rows.push(new Date(block.endISO).getTime());
-                        block.layoutRow = rows.length - 1;
-                    }
-                }
-                layoutRowCount = rows.length;
-            }
-
             function timeToX(ms) {
                 return H_PADDING + (ms - minTimeMs) * pxPerMs;
             }
@@ -290,47 +309,43 @@
                 return date.toTimeString().substring(0, 5);
             }
 
-            // 汎用描画関数 (画面用 & 画像出力用)
+            // 汎用描画関数
             function drawTimeline(targetCtx, width, height, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
                 const actualVPadding = V_PADDING + topMargin;
 
+                assignLayoutRows(); // 未配置があれば配置
                 updateTimelineBounds();
-                calculateBlockLayout(); // レイアウト計算 (ドラッグドロップ後はここで自動整列される)
+                calculateRowCount();
 
                 totalDurationMs = maxTimeMs - minTimeMs;
                 
-                // スケール計算 (画面幅に合わせるか、最小幅を確保するか)
-                const minWidth = isExport ? 1200 : canvasContainer.clientWidth; // 出力時は最低1200px確保
+                const minWidth = isExport ? 1200 : canvasContainer.clientWidth; 
                 const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000)); 
                 const finalWidth = Math.max(minWidth, calculatedWidth) + H_PADDING * 2;
                 
-                // 高さ計算
                 const contentHeight = (layoutRowCount * ROW_HEIGHT) + V_PADDING * 2 + topMargin;
                 const finalHeight = Math.max(400, contentHeight);
 
-                // コンテキスト設定
                 targetCtx.canvas.width = finalWidth;
                 targetCtx.canvas.height = finalHeight;
                 pxPerMs = (finalWidth - H_PADDING * 2) / totalDurationMs;
 
-                // 背景 (白)
+                // 背景
                 targetCtx.fillStyle = '#ffffff';
                 targetCtx.fillRect(0, 0, finalWidth, finalHeight);
 
-                // --- 画像出力用ヘッダー描画 ---
+                // ヘッダー (画像出力時)
                 if (isExport) {
-                    // アイコン
                     const iconSize = 50;
                     targetCtx.drawImage(appIcon, 20, 15, iconSize, iconSize);
                     
-                    // アプリ名 & プロジェクト名
                     targetCtx.fillStyle = '#333';
                     targetCtx.font = FONT_TITLE;
                     targetCtx.textAlign = 'left';
                     targetCtx.textBaseline = 'middle';
                     targetCtx.fillText(`BloSke - ${currentProjectName}`, 20 + iconSize + 15, 15 + iconSize / 2);
-                    targetCtx.textBaseline = 'alphabetic'; // 戻す
+                    targetCtx.textBaseline = 'alphabetic'; 
                 }
 
                 // データなし
@@ -342,7 +357,7 @@
                     return;
                 }
 
-                // --- 時間軸 ---
+                // 時間軸
                 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
                 const stepMs = (totalDurationMs <= FOUR_HOURS_MS) ? (30 * 60 * 1000) : (60 * 60 * 1000); 
                 
@@ -363,7 +378,7 @@
                     targetCtx.fillText(formatTime(new Date(t)), x, actualVPadding - 15);
                 }
 
-                // --- 左右の太線 ---
+                // 太線
                 targetCtx.strokeStyle = '#333';
                 targetCtx.lineWidth = 2;
                 targetCtx.fillStyle = '#333';
@@ -392,8 +407,7 @@
                     targetCtx.fillText(maxDate.toLocaleDateString('ja-JP'), xEnd, actualVPadding - 40);
                 }
 
-                // --- ブロック描画 ---
-                // ドラッグ中のブロックを最後に描画するため、リストを分ける
+                // ブロック描画
                 const normalBlocks = [];
                 const draggingBlockList = [];
 
@@ -405,7 +419,6 @@
                     }
                 });
 
-                // 描画関数
                 const renderBlock = (block, isDragRender) => {
                     const start = new Date(block.startISO);
                     const end = new Date(block.endISO);
@@ -415,13 +428,12 @@
                     const width = (end.getTime() - start.getTime()) * pxPerMs;
                     const height = ROW_HEIGHT * 0.8; 
 
-                    // ドラッグ中のY座標上書き
                     if (isDragRender) {
                         y = dragCurrentY; 
                     }
 
                     targetCtx.fillStyle = block.color;
-                    if (isDragRender) targetCtx.globalAlpha = 0.7; // ドラッグ中は半透明
+                    if (isDragRender) targetCtx.globalAlpha = 0.7; 
                     
                     roundRect(targetCtx, x, y, width, height, 5, true, false);
                     
@@ -473,12 +485,9 @@
                     }
                 };
 
-                // 通常ブロック描画
                 normalBlocks.forEach(b => renderBlock(b, false));
-                // ドラッグ中ブロック描画（最前面）
                 draggingBlockList.forEach(b => renderBlock(b, true));
 
-                // --- 画像出力用フッター (日時) ---
                 if (isExport) {
                     const now = new Date();
                     const dateStr = now.toLocaleString('ja-JP');
@@ -489,12 +498,10 @@
                 }
             }
 
-            // 画面用ラッパー
             function drawCanvas() {
                 drawTimeline(ctx, canvas.width, canvas.height, false);
             }
             
-            // 角丸矩形描画ヘルパー
             function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
                 if (typeof stroke === 'undefined') { stroke = true; }
                 if (typeof radius === 'undefined') { radius = 5; }
@@ -581,7 +588,6 @@
                 saveProjectData(user.username);
             });
 
-            // --- 画像出力 ---
             document.getElementById('export-img-btn').addEventListener('click', () => {
                 if (projectBlocks.length === 0) {
                     alert('出力するブロックがありません。');
@@ -589,16 +595,13 @@
                 }
                 
                 try {
-                    // 出力用の一時Canvasを作成
                     const exportCanvas = document.createElement('canvas');
                     const exportCtx = exportCanvas.getContext('2d');
                     
-                    // 画像用描画 (isExport = true)
                     drawTimeline(exportCtx, 0, 0, true);
                     
                     const dataUrl = exportCanvas.toDataURL('image/png');
                     
-                    // ファイル名生成 (プロジェクト名_YYYYMMDD_HHmm)
                     const now = new Date();
                     const yyyy = now.getFullYear();
                     const MM = String(now.getMonth() + 1).padStart(2, '0');
@@ -679,13 +682,17 @@
                 if (editingBlockId) {
                     const index = projectBlocks.findIndex(b => b.id === editingBlockId);
                     if (index !== -1) {
+                        // 更新時はlayoutRowを維持するが、新規登録の場合は初期配置を行う
                         projectBlocks[index] = { ...projectBlocks[index], ...blockData };
                     }
                 } else {
-                    projectBlocks.push({
+                    const newBlock = {
                         ...blockData,
-                        id: Date.now().toString()
-                    });
+                        id: Date.now().toString(),
+                        layoutRow: -1 // 一時的に未定
+                    };
+                    newBlock.layoutRow = findAvailableRow(newBlock); // 初期配置
+                    projectBlocks.push(newBlock);
                 }
                 
                 editingBlockId = null; 
@@ -694,7 +701,7 @@
                 hideModal('block-edit-modal');
             });
 
-            // --- 5. イベントリスナー (Canvas操作: 編集/削除/ドラッグ) ---
+            // --- 5. イベントリスナー (Canvas操作) ---
 
             function openEditModal(block) {
                 editingBlockId = block.id; 
@@ -729,7 +736,6 @@
                 };
             }
 
-            // --- マウスダウン / タッチスタート ---
             function handleInputStart(e) {
                 if (isEditMode) {
                     handleClickInEditMode(e);
@@ -745,11 +751,11 @@
                         isDragging = true;
                         dragTargetBlock = block;
                         dragStartX = pos.x;
-                        // Y軸追従用: オフセットを計算
                         dragOffsetY = pos.y - h.y;
-                        dragCurrentY = h.y; // 初期位置
+                        dragCurrentY = h.y; 
                         dragOriginalStartMs = new Date(block.startISO).getTime();
                         dragOriginalEndMs = new Date(block.endISO).getTime();
+                        dragOriginalRow = block.layoutRow; // 元の行を保存
                         
                         canvas.classList.add('dragging');
                         if (e.type === 'touchstart') e.preventDefault(); 
@@ -758,7 +764,6 @@
                 }
             }
 
-            // --- 編集モードでのクリック判定 ---
             function handleClickInEditMode(e) {
                 const pos = getCanvasCoordinates(e);
                 
@@ -783,7 +788,6 @@
                 }
             }
 
-            // --- マウスムーブ / タッチムーブ ---
             function handleInputMove(e) {
                 if (!isDragging || !dragTargetBlock) return;
                 
@@ -804,14 +808,44 @@
                 drawCanvas(); 
             }
 
-            // --- マウスアップ / タッチエンド ---
             function handleInputEnd(e) {
                 if (isDragging) {
                     isDragging = false;
-                    dragTargetBlock = null;
                     canvas.classList.remove('dragging');
                     
-                    // 変更を保存し、再描画 (これで自動レイアウトによりY位置が確定し、ハイライトも消える)
+                    // ドロップ位置の行を計算
+                    // V_PADDING + (row * ROW_HEIGHT) = y
+                    // row = (y - V_PADDING) / ROW_HEIGHT
+                    let dropRow = Math.round((dragCurrentY - V_PADDING) / ROW_HEIGHT);
+                    if (dropRow < 0) dropRow = 0;
+                    // 下限は自動拡張されるため制限しないが、極端な値は丸める
+                    
+                    const targetStart = new Date(dragTargetBlock.startISO).getTime();
+                    const targetEnd = new Date(dragTargetBlock.endISO).getTime();
+
+                    // --- スワップ処理 ---
+                    // ドロップ先の行で、時間帯が重なっているブロックを探す
+                    const conflictingBlocks = projectBlocks.filter(b => {
+                        if (b === dragTargetBlock) return false;
+                        if (b.layoutRow !== dropRow) return false;
+                        
+                        const bStart = new Date(b.startISO).getTime();
+                        const bEnd = new Date(b.endISO).getTime();
+                        // 重なり判定 (Targetの開始 < Bの終了 AND Targetの終了 > Bの開始)
+                        return targetStart < bEnd && targetEnd > bStart;
+                    });
+
+                    if (conflictingBlocks.length > 0) {
+                        // 衝突がある場合、それらを元の行 (dragOriginalRow) に弾く
+                        conflictingBlocks.forEach(b => {
+                            b.layoutRow = dragOriginalRow;
+                        });
+                    }
+
+                    // ドラッグしたブロックを新しい行に確定
+                    dragTargetBlock.layoutRow = dropRow;
+                    dragTargetBlock = null;
+
                     saveToLocalStorage(); 
                     drawCanvas();
                 }
