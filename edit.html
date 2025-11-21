@@ -301,7 +301,6 @@
                 totalDurationMs = maxTimeMs - minTimeMs;
                 const minCanvasWidth = canvasContainer.clientWidth;
                 
-                // ★★★ 修正: 構文エラー (余分な括弧) を削除 ★★★
                 const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000)); // 4時間で800px相当
                 
                 const canvasWidth = Math.max(minCanvasWidth, calculatedWidth) + H_PADDING * 2;
@@ -332,6 +331,9 @@
                 ctx.textAlign = 'center';
 
                 for (let t = minTimeMs; t <= maxTimeMs; t += stepMs) {
+                    // ★★★ 修正: 両端（開始・終了）は太線で描画するため、ここではスキップ ★★★
+                    if (t === minTimeMs || t === maxTimeMs) continue;
+
                     const x = timeToX(t);
                     ctx.beginPath();
                     ctx.moveTo(x, V_PADDING - 10);
