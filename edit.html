@@ -22,11 +22,17 @@
         /* (common.css で定義済み) */
         
         /* Canvasのカーソル制御 */
-        #timetableCanvas.edit-mode-active {
-            cursor: pointer;
+        #timetableCanvas {
+            cursor: default;
         }
-        #timetableCanvas.edit-mode-active:hover {
-            /* TODO: ホバー中のブロックをハイライト */
+        #timetableCanvas.edit-mode-active {
+            cursor: pointer; /* 編集モード時はポインター */
+        }
+        #timetableCanvas.dragging {
+            cursor: grab; /* ドラッグ可能 */
+        }
+        #timetableCanvas.dragging:active {
+            cursor: grabbing; /* 掴んでいる最中 */
         }
     </style>
 </head>
@@ -41,9 +47,10 @@
             <div class="button-field">
                 <button id="add-block-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> ブロック追加</button>
                 <button id="edit-mode-btn" class="btn btn-secondary"><i class="fa-solid fa-pen"></i> 編集モード</button>
+                <!-- 縦横表示は今回の実装範囲外のため無効化 -->
                 <button id="toggle-view-btn" class="btn btn-secondary" disabled><i class="fa-solid fa-arrows-left-right"></i> 縦横表示</button>
                 <button id="save-btn" class="btn btn-secondary"><i class="fa-solid fa-save"></i> 保存</button>
-                <button id="export-img-btn" class="btn btn-secondary" disabled><i class="fa-solid fa-image"></i> 画像出力</button>
+                <button id="export-img-btn" class="btn btn-secondary"><i class="fa-solid fa-image"></i> 画像出力</button>
                 <button id="reset-btn" class="btn btn-secondary" style="color: #dc3545;"><i class="fa-solid fa-trash"></i> リセット</button>
             </div>
 
@@ -129,7 +136,7 @@
             const H_PADDING = 80; // 時刻表示用の左右パディング
             const V_PADDING = 50; // 上部パディング
             const ROW_HEIGHT = 60; // 各行の高さ
-            const DELETE_BTN_SIZE = 18; // 削除ボタンのサイズ
+            const DELETE_BTN_SIZE = 20; // 削除ボタンのサイズ
             const FONT_S = '12px sans-serif';
             const FONT_M = '14px sans-serif';
             const FONT_L = 'bold 14px sans-serif';
@@ -137,30 +144,33 @@
             let projectBlocks = []; // {id, name, startISO, endISO, color, layoutRow, hitBox, deleteHitBox}
             let currentProjectName = '新規プロジェクト';
             let isEditMode = false;
-            let editingBlockId = null; // モーダルが編集モードかどうかの判定用
+            let editingBlockId = null; 
 
             // Canvas描画用の計算済みプロパティ
-            let minTimeMs = 0; // タイムラインの開始時刻 (ms)
-            let maxTimeMs = 0; // タイムラインの終了時刻 (ms)
-            let totalDurationMs = 0; // タイムラインの全期間 (ms)
-            let pxPerMs = 0; // 1ミリ秒あたりのピクセル数
-            let layoutRowCount = 0; // 必要な行数
+            let minTimeMs = 0; 
+            let maxTimeMs = 0; 
+            let totalDurationMs = 0; 
+            let pxPerMs = 0; 
+            let layoutRowCount = 0; 
+
+            // ドラッグ＆ドロップ用
+            let isDragging = false;
+            let dragTargetBlock = null;
+            let dragStartX = 0;
+            let dragOriginalStartMs = 0;
+            let dragOriginalEndMs = 0;
 
             // --- 1. データ読み込み・初期化 ---
 
-            // CSVデータ (projects.htmlから) をパース (仕様書 6.1)
             function parseCsvData(csvData) {
                 const lines = csvData.trim().split('\n');
                 const blocks = [];
-                // ヘッダーをスキップ (i=1)
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i];
-                    // "ブロック名","開始ISO","終了ISO","カラー"
-                    // (簡易パース: 厳密なCSVパースではない)
                     const parts = line.split(',').map(part => part.trim().replace(/"/g, ''));
                     if (parts.length >= 4) {
                         blocks.push({
-                            id: Date.now().toString() + i, // 簡易ID
+                            id: Date.now().toString() + i,
                             name: parts[0],
                             startISO: parts[1],
                             endISO: parts[2],
@@ -171,7 +181,6 @@
                 return blocks;
             }
 
-            // ローカルストレージから復元 (仕様書 3.2.1)
             function loadFromLocalStorage() {
                 try {
                     const dataStr = localStorage.getItem('bloske_local_project');
@@ -186,7 +195,6 @@
                 }
             }
             
-            // ローカルストレージに自動保存 (仕様書 3.2.2)
             function saveToLocalStorage() {
                 const data = {
                     name: currentProjectName,
@@ -195,15 +203,13 @@
                 localStorage.setItem('bloske_local_project', JSON.stringify(data));
             }
 
-            // --- 2. Canvas描画ロジック (仕様書 3.2.2) ---
+            // --- 2. Canvas描画ロジック ---
 
-            // ブロックの開始/終了時刻に基づき、タイムラインの境界を計算
             function updateTimelineBounds() {
                 if (projectBlocks.length === 0) {
-                    // デフォルトの表示 (例: 現在時刻から4時間)
                     const now = new Date();
-                    minTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime(); // 今の時間の00分
-                    maxTimeMs = minTimeMs + (4 * 60 * 60 * 1000); // 4時間後
+                    minTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime(); 
+                    maxTimeMs = minTimeMs + (4 * 60 * 60 * 1000); 
                     return;
                 }
 
@@ -217,62 +223,50 @@
                     if (end > maxEnd) maxEnd = end;
                 });
 
-                // 仕様書 3.2.2: 左端/右端は一番近い00分/30分
                 const roundDownTo30Min = (ms) => {
                     const d = new Date(ms);
                     const minutes = d.getMinutes();
-                    if (minutes >= 30) {
-                        d.setMinutes(30, 0, 0);
-                    } else {
-                        d.setMinutes(0, 0, 0);
-                    }
+                    if (minutes >= 30) d.setMinutes(30, 0, 0);
+                    else d.setMinutes(0, 0, 0);
                     return d.getTime();
                 };
                 
                 const roundUpTo30Min = (ms) => {
                     const d = new Date(ms);
                     const minutes = d.getMinutes();
-                    if (minutes > 30) {
-                        d.setHours(d.getHours() + 1, 0, 0, 0);
-                    } else if (minutes > 0) {
-                         d.setMinutes(30, 0, 0);
-                    }
-                    // 00分または30分ジャストの場合はそのまま
+                    if (minutes > 30) d.setHours(d.getHours() + 1, 0, 0, 0);
+                    else if (minutes > 0) d.setMinutes(30, 0, 0);
                     return d.getTime();
                 };
 
                 minTimeMs = roundDownTo30Min(minStart);
                 maxTimeMs = roundUpTo30Min(maxEnd);
                 
-                // 期間が短すぎる場合の最小幅を担保
-                if (maxTimeMs - minTimeMs < (60 * 60 * 1000)) { // 1時間未満
-                    maxTimeMs = minTimeMs + (60 * 60 * 1000); // 1時間
+                if (maxTimeMs - minTimeMs < (60 * 60 * 1000)) { 
+                    maxTimeMs = minTimeMs + (60 * 60 * 1000); 
                 }
             }
 
-            // ブロックの重なりを計算し、各ブロックに `layoutRow` を割り当てる (仕様書 3.2.2)
             function calculateBlockLayout() {
-                // 開始時刻でソート
+                // ドラッグ中のブロックは、一時的に更新された時刻でソート・配置される
                 const sortedBlocks = [...projectBlocks].sort((a, b) => new Date(a.startISO).getTime() - new Date(b.startISO).getTime());
                 
-                const rows = []; // 各行の最終終了時刻 (ms) を保持
+                const rows = []; 
                 layoutRowCount = 0;
 
                 for (const block of sortedBlocks) {
                     const blockStart = new Date(block.startISO).getTime();
                     let placed = false;
 
-                    // 既存の行に配置できるか探す
                     for (let i = 0; i < rows.length; i++) {
-                        if (blockStart >= rows[i]) { // この行の最後のブロックより後に開始
-                            rows[i] = new Date(block.endISO).getTime(); // この行の最終終了時刻を更新
-                            block.layoutRow = i; // 0-indexed
+                        if (blockStart >= rows[i]) { 
+                            rows[i] = new Date(block.endISO).getTime(); 
+                            block.layoutRow = i; 
                             placed = true;
                             break;
                         }
                     }
 
-                    // 既存の行に配置できない場合、新しい行を追加
                     if (!placed) {
                         rows.push(new Date(block.endISO).getTime());
                         block.layoutRow = rows.length - 1;
@@ -281,27 +275,22 @@
                 layoutRowCount = rows.length;
             }
 
-            // ミリ秒をCanvasのX座標に変換
             function timeToX(ms) {
                 return H_PADDING + (ms - minTimeMs) * pxPerMs;
             }
             
-            // hh:mm 形式の時刻文字列を返す
             function formatTime(date) {
                 return date.toTimeString().substring(0, 5);
             }
 
-            // メインの描画関数
             function drawCanvas() {
-                // 1. レイアウト計算
                 updateTimelineBounds();
                 calculateBlockLayout();
 
-                // 2. Canvasサイズ設定
                 totalDurationMs = maxTimeMs - minTimeMs;
                 const minCanvasWidth = canvasContainer.clientWidth;
                 
-                const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000)); // 4時間で800px相当
+                const calculatedWidth = totalDurationMs * (800 / (4 * 60 * 60 * 1000)); 
                 
                 const canvasWidth = Math.max(minCanvasWidth, calculatedWidth) + H_PADDING * 2;
                 const canvasHeight = Math.max(400, (layoutRowCount * ROW_HEIGHT) + V_PADDING * 2);
@@ -310,9 +299,10 @@
                 canvas.height = canvasHeight;
                 pxPerMs = (canvas.width - H_PADDING * 2) / totalDurationMs;
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // 背景を白で塗りつぶす (画像出力のため)
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                // 3. 空表示 (仕様書 3.2.2)
                 if (projectBlocks.length === 0) {
                     ctx.fillStyle = '#adb5bd';
                     ctx.font = '16px sans-serif';
@@ -321,17 +311,17 @@
                     return;
                 }
 
-                // 4. 時間軸の描画 (仕様書 3.2.2)
+                // 時間軸
                 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
-                const stepMs = (totalDurationMs <= FOUR_HOURS_MS) ? (30 * 60 * 1000) : (60 * 60 * 1000); // 30分 or 1時間
+                const stepMs = (totalDurationMs <= FOUR_HOURS_MS) ? (30 * 60 * 1000) : (60 * 60 * 1000); 
                 
-                ctx.strokeStyle = '#e9ecef'; // 薄い補助線
-                ctx.fillStyle = '#868e96'; // 時刻テキスト
+                ctx.strokeStyle = '#e9ecef'; 
+                ctx.fillStyle = '#868e96'; 
                 ctx.font = FONT_S;
                 ctx.textAlign = 'center';
 
                 for (let t = minTimeMs; t <= maxTimeMs; t += stepMs) {
-                    // ★★★ 修正: 両端（開始・終了）は太線で描画するため、ここではスキップ ★★★
+                    // 両端はスキップ (太線で描画するため)
                     if (t === minTimeMs || t === maxTimeMs) continue;
 
                     const x = timeToX(t);
@@ -343,7 +333,7 @@
                     ctx.fillText(formatTime(new Date(t)), x, V_PADDING - 15);
                 }
 
-                // 5. 左右の太線と時刻 (仕様書 3.2.2)
+                // 左右の太線
                 ctx.strokeStyle = '#333';
                 ctx.lineWidth = 2;
                 ctx.fillStyle = '#333';
@@ -352,7 +342,6 @@
                 const minDate = new Date(minTimeMs);
                 const maxDate = new Date(maxTimeMs);
                 
-                // 左端
                 const xStart = timeToX(minTimeMs);
                 ctx.beginPath();
                 ctx.moveTo(xStart, V_PADDING - 20);
@@ -360,7 +349,6 @@
                 ctx.stroke();
                 ctx.fillText(formatTime(minDate), xStart, V_PADDING - 25);
                 
-                // 右端
                 const xEnd = timeToX(maxTimeMs);
                 ctx.beginPath();
                 ctx.moveTo(xEnd, V_PADDING - 20);
@@ -368,14 +356,13 @@
                 ctx.stroke();
                 ctx.fillText(formatTime(maxDate), xEnd, V_PADDING - 25);
                 
-                // 日付が異なる場合は日付も表示
                 if (minDate.toDateString() !== maxDate.toDateString()) {
                     ctx.font = FONT_S;
                     ctx.fillText(minDate.toLocaleDateString('ja-JP'), xStart, V_PADDING - 40);
                     ctx.fillText(maxDate.toLocaleDateString('ja-JP'), xEnd, V_PADDING - 40);
                 }
 
-                // 6. ブロックの描画
+                // ブロックの描画
                 projectBlocks.forEach(block => {
                     const start = new Date(block.startISO);
                     const end = new Date(block.endISO);
@@ -383,62 +370,100 @@
                     const x = timeToX(start.getTime());
                     const y = V_PADDING + (block.layoutRow * ROW_HEIGHT);
                     const width = (end.getTime() - start.getTime()) * pxPerMs;
-                    const height = ROW_HEIGHT * 0.8; // 80% height
+                    const height = ROW_HEIGHT * 0.8; 
 
-                    // ブロック本体
                     ctx.fillStyle = block.color;
-                    ctx.fillRect(x, y, width, height);
+                    
+                    // ドラッグ中のブロックは少し透明に
+                    if (isDragging && dragTargetBlock === block) {
+                        ctx.globalAlpha = 0.6;
+                    }
+                    
+                    // 角丸矩形
+                    roundRect(ctx, x, y, width, height, 5, true, false);
+                    
+                    ctx.globalAlpha = 1.0; // 戻す
 
-                    // テキスト (仕様書 3.2.2)
-                    ctx.fillStyle = '#ffffff'; // TODO: 色の明度に合わせて白か黒か決める
+                    ctx.fillStyle = '#ffffff'; 
                     ctx.font = FONT_L;
                     ctx.textAlign = 'left';
-                    ctx.fillText(block.name, x + 8, y + 20);
+                    // 幅が狭い場合はテキストを省略または非表示にする処理を入れると良いが、今回は簡易的にクリップ
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(x, y, width, height);
+                    ctx.clip();
                     
+                    ctx.fillText(block.name, x + 8, y + 20);
                     ctx.font = FONT_S;
                     ctx.fillText(formatTime(start), x + 8, y + 38);
-                    
                     ctx.textAlign = 'right';
                     ctx.fillText(formatTime(end), x + width - 8, y + 38);
+                    ctx.restore();
 
-                    // ヒットボックスを保存
                     block.hitBox = { x, y, width, height };
 
-                    // 7. 編集モード用UIの描画
                     if (isEditMode) {
                         // 削除ボタン
-                        const delX = x + width - DELETE_BTN_SIZE - 2;
-                        const delY = y + 2;
-                        ctx.fillStyle = 'rgba(220, 53, 69, 0.8)'; // Bootstrap danger
-                        ctx.fillRect(delX, delY, DELETE_BTN_SIZE, DELETE_BTN_SIZE);
+                        const delX = x + width - DELETE_BTN_SIZE + 5;
+                        const delY = y - 5;
+                        
+                        ctx.fillStyle = 'rgba(220, 53, 69, 1)'; 
+                        ctx.beginPath();
+                        ctx.arc(delX, delY, DELETE_BTN_SIZE / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                        
                         ctx.fillStyle = '#ffffff';
-                        ctx.font = 'bold 14px sans-serif';
+                        ctx.font = 'bold 12px sans-serif';
                         ctx.textAlign = 'center';
-                        ctx.fillText('×', delX + DELETE_BTN_SIZE / 2, delY + DELETE_BTN_SIZE / 2 + 5);
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('×', delX, delY);
+                        ctx.textBaseline = 'alphabetic'; // 戻す
 
-                        // ヒットボックス保存
-                        block.deleteHitBox = { x: delX, y: delY, width: DELETE_BTN_SIZE, height: DELETE_BTN_SIZE };
+                        block.deleteHitBox = { 
+                            x: delX - DELETE_BTN_SIZE/2, 
+                            y: delY - DELETE_BTN_SIZE/2, 
+                            width: DELETE_BTN_SIZE, 
+                            height: DELETE_BTN_SIZE 
+                        };
                     } else {
                         block.deleteHitBox = null;
                     }
                 });
             }
+            
+            // 角丸矩形描画ヘルパー
+            function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+                if (typeof stroke === 'undefined') { stroke = true; }
+                if (typeof radius === 'undefined') { radius = 5; }
+                if (typeof radius === 'number') { radius = {tl: radius, tr: radius, br: radius, bl: radius}; } else { var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0}; for (var side in defaultRadius) { radius[side] = radius[side] || defaultRadius[side]; } }
+                ctx.beginPath();
+                ctx.moveTo(x + radius.tl, y);
+                ctx.lineTo(x + width - radius.tr, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+                ctx.lineTo(x + width, y + height - radius.br);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+                ctx.lineTo(x + radius.bl, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+                ctx.lineTo(x, y + radius.tl);
+                ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+                ctx.closePath();
+                if (fill) { ctx.fill(); }
+                if (stroke) { ctx.stroke(); }
+            }
 
             // --- 3. イベントリスナー (ボタン) ---
 
-            // [プロジェクト名] クリック (仕様書 3.2.2)
             projectNameEl.addEventListener('click', () => {
                 const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
                 if (newName && newName.trim() !== '') {
                     currentProjectName = newName.trim();
                     projectNameEl.textContent = currentProjectName;
-                    saveToLocalStorage(); // ローカルにも保存
+                    saveToLocalStorage(); 
                 }
             });
 
-            // [ブロック追加]
             document.getElementById('add-block-btn').addEventListener('click', () => {
-                editingBlockId = null; // 新規モード
+                editingBlockId = null; 
                 document.getElementById('block-modal-title').textContent = 'ブロック追加';
                 document.getElementById('block-edit-form').reset();
                 document.getElementById('block-id').value = '';
@@ -451,7 +476,6 @@
                 document.getElementById('block-end-date').value = yyyyMMdd;
                 document.getElementById('block-end-time').value = hhMM;
 
-                // カラーピッカーリセット
                 blockColorInput.value = colors[0];
                  Array.from(colorPicker.children).forEach((child, index) => {
                     child.style.borderColor = (index === 0) ? '#333' : 'transparent';
@@ -459,7 +483,6 @@
                 showModal('block-edit-modal');
             });
             
-            // [編集モード] (仕様書 3.2.2)
             document.getElementById('edit-mode-btn').addEventListener('click', (e) => {
                 isEditMode = !isEditMode;
                 const btn = e.currentTarget;
@@ -474,10 +497,9 @@
                     btn.classList.add('btn-secondary');
                     canvas.classList.remove('edit-mode-active');
                 }
-                drawCanvas(); // 編集UIを再描画
+                drawCanvas(); 
             });
 
-            // [リセット] (仕様書 3.2.2)
             document.getElementById('reset-btn').addEventListener('click', () => {
                 if (confirm('プロジェクトをリセットしますか？\n（すべてのブロックが削除されます）')) {
                     projectBlocks = [];
@@ -486,7 +508,6 @@
                 }
             });
 
-            // [保存] (仕様書 3.2.2)
             document.getElementById('save-btn').addEventListener('click', () => {
                 const user = getUserSession();
                 if (!user) {
@@ -498,6 +519,30 @@
                 saveProjectData(user.username);
             });
 
+            // ★★★ 追加: 画像出力機能 ★★★
+            document.getElementById('export-img-btn').addEventListener('click', () => {
+                if (projectBlocks.length === 0) {
+                    alert('出力するブロックがありません。');
+                    return;
+                }
+                
+                try {
+                    // Canvasを画像データURLに変換
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    // ダウンロードリンクを作成してクリック
+                    const link = document.createElement('a');
+                    link.download = `${currentProjectName}.png`;
+                    link.href = dataUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (e) {
+                    console.error('画像出力エラー:', e);
+                    alert('画像の出力に失敗しました。');
+                }
+            });
+
             // --- 4. イベントリスナー (モーダル) ---
 
             setupModalClose('block-edit-modal', '#cancel-block-edit-btn');
@@ -506,7 +551,6 @@
             const colorPicker = document.getElementById('color-picker');
             const blockColorInput = document.getElementById('block-color');
 
-            // カラーピッカー生成 (前回と同じ)
             colors.forEach(color => {
                 const colorCircle = document.createElement('div');
                 colorCircle.style.width = '30px';
@@ -531,7 +575,6 @@
                 colorPicker.appendChild(colorCircle);
             });
 
-            // モーダル [決定] ボタン (新規/編集 両対応)
             blockEditForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 
@@ -558,37 +601,32 @@
                 const blockData = { name, startISO, endISO, color };
 
                 if (editingBlockId) {
-                    // --- 編集モード ---
                     const index = projectBlocks.findIndex(b => b.id === editingBlockId);
                     if (index !== -1) {
                         projectBlocks[index] = { ...projectBlocks[index], ...blockData };
                     }
                 } else {
-                    // --- 新規モード ---
                     projectBlocks.push({
                         ...blockData,
                         id: Date.now().toString()
                     });
                 }
                 
-                editingBlockId = null; // IDをリセット
+                editingBlockId = null; 
                 saveToLocalStorage();
                 drawCanvas();
                 hideModal('block-edit-modal');
             });
 
-            // --- 5. イベントリスナー (Canvas クリック) ---
+            // --- 5. イベントリスナー (Canvas操作: 編集/削除/ドラッグ) ---
 
-            // ブロック編集モーダルを開く (仕様書 3.2.2)
             function openEditModal(block) {
-                editingBlockId = block.id; // 編集モードに設定
+                editingBlockId = block.id; 
                 document.getElementById('block-modal-title').textContent = 'ブロック編集';
                 
-                // フォームに既存の値を入力
                 document.getElementById('block-id').value = block.id;
                 document.getElementById('block-name').value = block.name;
                 
-                // ISOをDateとTimeに変換
                 const start = new Date(block.startISO);
                 const end = new Date(block.endISO);
                 
@@ -597,7 +635,6 @@
                 document.getElementById('block-end-date').value = end.toISOString().split('T')[0];
                 document.getElementById('block-end-time').value = end.toTimeString().substring(0, 5);
 
-                // カラーピッカーを選択
                 blockColorInput.value = block.color;
                 Array.from(colorPicker.children).forEach(child => {
                     child.style.borderColor = (child.dataset.color === block.color) ? '#333' : 'transparent';
@@ -606,75 +643,141 @@
                 showModal('block-edit-modal');
             }
 
-            // Canvasクリック処理 (編集/削除)
-            canvas.addEventListener('click', (e) => {
-                if (!isEditMode) return; // 編集モードでない場合は何もしない
-                
+            // 共通: 座標取得
+            function getCanvasCoordinates(e) {
                 const rect = canvas.getBoundingClientRect();
-                // Canvasのスクロール位置を考慮
-                const x = e.clientX - rect.left + canvasContainer.scrollLeft; 
-                const y = e.clientY - rect.top + canvasContainer.scrollTop;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                return {
+                    x: clientX - rect.left + canvasContainer.scrollLeft,
+                    y: clientY - rect.top + canvasContainer.scrollTop
+                };
+            }
 
-                // ヒットしたブロックを検索 (逆順 = 手前にあるものが優先)
+            // --- マウスダウン / タッチスタート ---
+            function handleInputStart(e) {
+                if (isEditMode) {
+                    // 編集モード中はドラッグさせず、クリック判定のみ
+                    handleClickInEditMode(e);
+                    return;
+                }
+
+                const pos = getCanvasCoordinates(e);
+                
+                // 手前のブロックから判定
+                for (const block of [...projectBlocks].reverse()) {
+                    if (!block.hitBox) continue;
+                    const h = block.hitBox;
+                    if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
+                        // ドラッグ開始
+                        isDragging = true;
+                        dragTargetBlock = block;
+                        dragStartX = pos.x;
+                        dragOriginalStartMs = new Date(block.startISO).getTime();
+                        dragOriginalEndMs = new Date(block.endISO).getTime();
+                        
+                        canvas.classList.add('dragging');
+                        // タッチスクロール防止 (ブロック上のみ)
+                        if (e.type === 'touchstart') e.preventDefault(); 
+                        break;
+                    }
+                }
+            }
+
+            // --- 編集モードでのクリック判定 ---
+            function handleClickInEditMode(e) {
+                const pos = getCanvasCoordinates(e);
+                
                 for (const block of [...projectBlocks].reverse()) {
                     if (!block.hitBox) continue;
                     
-                    // 1. 削除ボタンの判定
+                    // 削除ボタン
                     const d = block.deleteHitBox;
-                    if (d && x >= d.x && x <= d.x + d.width && y >= d.y && y <= d.y + d.height) {
+                    if (d && pos.x >= d.x && pos.x <= d.x + d.width && pos.y >= d.y && pos.y <= d.y + d.height) {
                         if (confirm(`「${block.name}」を本当に削除しますか？`)) {
                             projectBlocks = projectBlocks.filter(b => b.id !== block.id);
                             saveToLocalStorage();
                             drawCanvas();
                         }
-                        return; // 処理終了
+                        return;
                     }
                     
-                    // 2. ブロック本体の判定 (編集)
+                    // 本体 (編集)
                     const h = block.hitBox;
-                    if (x >= h.x && x <= h.x + h.width && y >= h.y && y <= h.y + h.height) {
+                    if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
                         openEditModal(block);
-                        return; // 処理終了
+                        return;
                     }
                 }
-            });
+            }
+
+            // --- マウスムーブ / タッチムーブ ---
+            function handleInputMove(e) {
+                if (!isDragging || !dragTargetBlock) return;
+                
+                e.preventDefault(); // スクロール防止
+                const pos = getCanvasCoordinates(e);
+                const deltaX = pos.x - dragStartX;
+                
+                // ピクセル差分を時間差分(ms)に変換
+                const deltaMs = deltaX / pxPerMs;
+                
+                const newStartMs = dragOriginalStartMs + deltaMs;
+                const newEndMs = dragOriginalEndMs + deltaMs;
+                
+                dragTargetBlock.startISO = new Date(newStartMs).toISOString();
+                dragTargetBlock.endISO = new Date(newEndMs).toISOString();
+                
+                drawCanvas(); // リアルタイム再描画
+            }
+
+            // --- マウスアップ / タッチエンド ---
+            function handleInputEnd(e) {
+                if (isDragging) {
+                    isDragging = false;
+                    dragTargetBlock = null;
+                    canvas.classList.remove('dragging');
+                    saveToLocalStorage(); // 変更を保存
+                }
+            }
+
+            // イベントリスナー登録
+            canvas.addEventListener('mousedown', handleInputStart);
+            canvas.addEventListener('mousemove', handleInputMove);
+            canvas.addEventListener('mouseup', handleInputEnd);
+            canvas.addEventListener('mouseleave', handleInputEnd);
+
+            canvas.addEventListener('touchstart', handleInputStart, {passive: false});
+            canvas.addEventListener('touchmove', handleInputMove, {passive: false});
+            canvas.addEventListener('touchend', handleInputEnd);
+
 
             // --- 6. 最終初期化処理 ---
 
-            // ページ読み込み時のデータロード
             const urlParams = new URLSearchParams(window.location.search);
             const loadedCsvData = sessionStorage.getItem('bloske_loaded_csv');
             
             if (loadedCsvData) {
-                // (A) プロジェクト一覧から読み込まれた場合
                 currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '読み込みプロジェクト';
                 projectBlocks = parseCsvData(loadedCsvData);
                 sessionStorage.removeItem('bloske_loaded_csv'); 
                 sessionStorage.removeItem('bloske_current_project_name');
             } else if (urlParams.has('restore')) {
-                // (B) ローカルストレージから復元する場合
                 loadFromLocalStorage();
             } else {
-                // (C) 新規作成の場合
                 currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '新規プロジェクト';
                 sessionStorage.removeItem('bloske_current_project_name');
             }
             projectNameEl.textContent = currentProjectName;
             
-            // 初回描画
             drawCanvas(); 
-            
-            // ウィンドウリサイズ時にも再描画
             window.addEventListener('resize', drawCanvas);
 
-            // [保存] (仕様書 3.2.2)
             async function saveProjectData(username) {
                 const projectName = projectNameEl.textContent;
                 
-                // projectBlocks からCSVを生成 (仕様書 6.1)
-                let csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; // ヘッダー
+                let csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; 
                 projectBlocks.forEach(block => {
-                    // CSV特殊文字（" と ,）をエスケープ
                     const name = `"${block.name.replace(/"/g, '""')}"`;
                     csvData += `${name},"${block.startISO}","${block.endISO}","${block.color}"\n`;
                 });
@@ -690,7 +793,6 @@
                         csvData: csvData
                     });
                     alert('保存しました。');
-                    // 保存に成功したらローカルストレージは不要
                     localStorage.removeItem('bloske_local_project');
                 } catch (error) {
                     console.error('保存失敗:', error);
