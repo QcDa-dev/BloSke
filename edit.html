@@ -122,7 +122,6 @@
     <script src="common.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIを初期化
             initCommonUI('BloSke');
 
             // --- グローバル変数・定数 ---
@@ -131,49 +130,46 @@
             const canvas = document.getElementById('timetableCanvas');
             const ctx = canvas.getContext('2d');
             
-            // レイアウト定数
-            const PADDING_MAIN = 60;  // メイン軸方向のパディング (時刻表示用)
-            const PADDING_CROSS = 40; // 交差軸方向のパディング (ヘッダー/フッター用)
-            const ROW_SIZE = 60;      // 行の高さ(横表示) または 列の幅(縦表示)
-            const GAP_2COL = 40;      // 2段組時の間隔
+            const PADDING_MAIN = 60;  
+            const PADDING_CROSS = 40; 
+            const ROW_SIZE = 60;      
+            const GAP_2COL = 60;      
             const DELETE_BTN_SIZE = 20;
             const HEADER_HEIGHT_EXPORT = 80; 
             
-            // フォント
             const FONT_S = '12px sans-serif';
             const FONT_M = '14px sans-serif';
             const FONT_L = 'bold 14px sans-serif';
             const FONT_TITLE = 'bold 24px sans-serif';
             
-            // 状態変数
-            let projectBlocks = []; 
+            let projectBlocks = []; // {..., hitBoxes: []}
             let currentProjectName = '新規プロジェクト';
             let isEditMode = false;
             let editingBlockId = null;
             
-            // 表示設定
-            let isVertical = false;   // 縦書きモードかどうか
-            let isTwoColumn = false;  // 2段組かどうか
+            let isVertical = false;   
+            let isTwoColumn = false;  
 
-            // 計算済みプロパティ
             let minTimeMs = 0; 
             let maxTimeMs = 0; 
             let totalDurationMs = 0; 
             let pxPerMs = 0; 
-            let layoutRowCount = 0; // 行数（縦表示なら列数）
+            let layoutRowCount = 0; 
+            
+            // 描画オフセット（中央揃え用）
+            let contentOffsetX = 0;
+            let contentOffsetY = 0;
 
-            // ドラッグ＆ドロップ用
             let isDragging = false;
             let dragTargetBlock = null;
-            let dragStartPos = { x: 0, y: 0 };
+            let dragStartX = 0;
             let dragOriginalStartMs = 0;
             let dragOriginalEndMs = 0;
             let dragOriginalRow = 0; 
-            let dragOffset = 0; // マウスとブロック開始位置の差分(軸方向)
-            let dragCrossOffset = 0; // マウスとブロック開始位置の差分(交差方向)
+            let dragOffset = 0; 
+            let dragCrossOffset = 0; 
             let dragCurrentPos = { x: 0, y: 0 };
 
-            // アプリロゴ画像
             const appIcon = new Image();
             appIcon.src = 'icon.svg';
 
@@ -192,7 +188,7 @@
                             startISO: parts[1],
                             endISO: parts[2],
                             color: parts[3],
-                            layoutRow: -1 // 未定義
+                            layoutRow: -1
                         });
                     }
                 }
@@ -219,7 +215,6 @@
 
             // --- 2. レイアウトロジック ---
 
-            // 空き行を探す (初期配置用)
             function findAvailableRow(targetBlock) {
                 const targetStart = new Date(targetBlock.startISO).getTime();
                 const targetEnd = new Date(targetBlock.endISO).getTime();
@@ -236,7 +231,6 @@
                 }
             }
 
-            // 未配置ブロックに行を割り当て
             function assignLayoutRows() {
                 projectBlocks.forEach(block => {
                     if (typeof block.layoutRow === 'undefined' || block.layoutRow === -1) {
@@ -245,17 +239,15 @@
                 });
             }
 
-            // 行数(列数)を計算
             function calculateRowCount() {
                 let maxRow = -1;
                 projectBlocks.forEach(block => {
                     if (block.layoutRow > maxRow) maxRow = block.layoutRow;
                 });
-                // 最低でも数行確保
                 layoutRowCount = Math.max(1, maxRow + 2); 
             }
 
-            // --- 3. Canvas描画ロジック (汎用化) ---
+            // --- 3. Canvas描画ロジック ---
 
             function updateTimelineBounds() {
                 if (projectBlocks.length === 0) {
@@ -272,7 +264,8 @@
                     if (start < minStart) minStart = start;
                     if (end > maxEnd) maxEnd = end;
                 });
-                // 30分単位で丸め
+                
+                // 丸め処理
                 const roundMs = (ms, up) => {
                     const d = new Date(ms);
                     const m = d.getMinutes();
@@ -294,69 +287,46 @@
                 return date.toTimeString().substring(0, 5);
             }
 
-            // 描画座標計算ヘルパー
-            // time: 時刻ms, row: 行番号, section: 0(前半) or 1(後半)
+            // 座標計算ヘルパー (中央揃えオフセット加算済み)
             function getRect(timeStart, timeEnd, row, section, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
                 
-                // 2段組のオフセット計算
-                let baseAxis = 0; // 時間軸方向の開始位置
-                let baseCross = 0; // 行方向の開始位置
-                
-                // 期間全体の中間
+                // 期間全体の中間 (セクションの境界)
                 const midTimeMs = minTimeMs + (totalDurationMs / 2);
-                // セクションごとの開始時刻
                 const sectionStartMs = (section === 0) ? minTimeMs : midTimeMs;
                 
-                // 表示領域のサイズ計算
-                // 横表示: 幅=時間, 高さ=行
-                // 縦表示: 幅=行, 高さ=時間
-                
-                // 座標計算用の相対時間
                 const relStart = timeStart - sectionStartMs;
                 const relEnd = timeEnd - sectionStartMs;
                 
                 const length = (relEnd - relStart) * pxPerMs;
                 const startPos = PADDING_MAIN + (relStart * pxPerMs);
                 
-                // セクションによるオフセット
-                if (isTwoColumn) {
-                    if (!isVertical) {
-                        // 横・2段組: 上下に並べる
-                        // 上段: section 0, 下段: section 1
-                        if (section === 1) {
-                            baseCross = (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                        }
-                    } else {
-                        // 縦・2段組: 左右に並べる
-                        if (section === 1) {
-                            baseCross = (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                        }
-                    }
+                let baseCross = 0;
+                if (isTwoColumn && section === 1) {
+                    baseCross = (layoutRowCount * ROW_SIZE) + GAP_2COL;
                 }
 
                 const rowPos = PADDING_CROSS + topMargin + baseCross + (row * ROW_SIZE);
 
                 if (!isVertical) {
-                    // 横表示: x=時間, y=行
+                    // 横表示
                     return {
-                        x: startPos,
-                        y: rowPos,
+                        x: startPos + contentOffsetX, // 中央揃え
+                        y: rowPos + contentOffsetY,   // 中央揃え
                         w: length,
                         h: ROW_SIZE * 0.8
                     };
                 } else {
-                    // 縦表示: x=行, y=時間
+                    // 縦表示
                     return {
-                        x: rowPos,
-                        y: startPos,
+                        x: rowPos + contentOffsetX,   // 中央揃え
+                        y: startPos + contentOffsetY, // 中央揃え
                         w: ROW_SIZE * 0.8,
                         h: length
                     };
                 }
             }
 
-            // メイン描画関数
             function drawTimeline(targetCtx, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
                 
@@ -365,44 +335,51 @@
                 calculateRowCount();
 
                 totalDurationMs = maxTimeMs - minTimeMs;
-                // 2段組の場合は、表示上の期間は半分になる
                 const displayDurationMs = isTwoColumn ? (totalDurationMs / 2) : totalDurationMs;
 
-                // スケール計算
-                const minCanvasDim = isExport ? 1200 : 
-                                     (isVertical ? canvasContainer.clientHeight : canvasContainer.clientWidth); 
-                                     // 縦表示なら高さ、横表示なら幅を基準にするが、
-                                     // コンテナの高さは固定(400)なので、縦表示時はスクロール前提で長くする
-                
-                // 基準: 4時間を800px (横) または 600px (縦)
-                const basePx = isVertical ? 600 : 800;
-                const calculatedLength = displayDurationMs * (basePx / (4 * 60 * 60 * 1000));
-                
-                const mainAxisLength = Math.max(isVertical ? 600 : 800, calculatedLength) + PADDING_MAIN * 2;
-                
-                // 交差軸（行）の長さ
-                let crossAxisLength = (layoutRowCount * ROW_SIZE) + PADDING_CROSS * 2 + topMargin;
+                // コンテンツの本来のサイズ (パディング込み)
+                const contentMainLength = (displayDurationMs * (800 / (4 * 3600000))) + PADDING_MAIN * 2;
+                let contentCrossLength = (layoutRowCount * ROW_SIZE) + PADDING_CROSS * 2 + topMargin;
                 if (isTwoColumn) {
-                    // 2段組なら倍 + ギャップ
-                    crossAxisLength = (crossAxisLength - PADDING_CROSS * 2 - topMargin) * 2 + GAP_2COL + PADDING_CROSS * 2 + topMargin;
+                    contentCrossLength = (contentCrossLength - PADDING_CROSS * 2 - topMargin) * 2 + GAP_2COL + PADDING_CROSS * 2 + topMargin;
                 }
-                // 画面表示時は最低高さを確保
-                crossAxisLength = Math.max(400, crossAxisLength);
+                
+                // 最低サイズ
+                const minWidth = isExport ? 1200 : canvasContainer.clientWidth;
+                const minHeight = isExport ? (contentCrossLength + 100) : 400;
 
-                // Canvasサイズ決定
+                // Canvasサイズ (コンテンツサイズと最低サイズの大きい方)
+                // 横表示なら contentMainLength が幅、contentCrossLength が高さ
+                let canvasW, canvasH;
                 if (!isVertical) {
-                    targetCtx.canvas.width = mainAxisLength;
-                    targetCtx.canvas.height = crossAxisLength;
-                    pxPerMs = (mainAxisLength - PADDING_MAIN * 2) / displayDurationMs;
+                    canvasW = Math.max(minWidth, contentMainLength);
+                    canvasH = Math.max(minHeight, contentCrossLength);
                 } else {
-                    targetCtx.canvas.width = crossAxisLength;
-                    targetCtx.canvas.height = mainAxisLength;
-                    pxPerMs = (mainAxisLength - PADDING_MAIN * 2) / displayDurationMs;
+                    canvasW = Math.max(minWidth, contentCrossLength);
+                    canvasH = Math.max(minHeight, contentMainLength);
+                }
+
+                targetCtx.canvas.width = canvasW;
+                targetCtx.canvas.height = canvasH;
+
+                // pxPerMs の再計算 (描画領域の長さに合わせる)
+                // コンテンツの実サイズを基準にするため、計算式は固定値ベースで維持
+                // 伸縮させたい場合はここを変えるが、今回はサイズ固定で中央寄せする
+                pxPerMs = (contentMainLength - PADDING_MAIN * 2) / displayDurationMs;
+
+                // 中央揃えオフセット計算
+                // Canvas全体の中で、コンテンツ(contentMainLength/contentCrossLength)を中央に配置
+                if (!isVertical) {
+                    contentOffsetX = Math.max(0, (canvasW - contentMainLength) / 2);
+                    contentOffsetY = Math.max(0, (canvasH - contentCrossLength) / 2);
+                } else {
+                    contentOffsetX = Math.max(0, (canvasW - contentCrossLength) / 2);
+                    contentOffsetY = Math.max(0, (canvasH - contentMainLength) / 2);
                 }
 
                 // 背景
                 targetCtx.fillStyle = '#ffffff';
-                targetCtx.fillRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+                targetCtx.fillRect(0, 0, canvasW, canvasH);
 
                 // ヘッダー (画像出力)
                 if (isExport) {
@@ -421,11 +398,16 @@
                     targetCtx.fillStyle = '#adb5bd';
                     targetCtx.font = '16px sans-serif';
                     targetCtx.textAlign = 'center';
-                    targetCtx.fillText('イベントが1つも登録されていません。', targetCtx.canvas.width / 2, targetCtx.canvas.height / 2);
+                    targetCtx.fillText('イベントが1つも登録されていません。', canvasW / 2, canvasH / 2);
                     return;
                 }
 
-                // --- 描画ループ (1回 or 2回) ---
+                // ヒットボックス初期化 (画面描画時のみ)
+                if (!isExport) {
+                    projectBlocks.forEach(b => b.hitBoxes = []);
+                }
+
+                // --- 描画ループ (セクションごと) ---
                 const sections = isTwoColumn ? 2 : 1;
                 const midTimeMs = minTimeMs + (totalDurationMs / 2);
 
@@ -443,31 +425,29 @@
                     targetCtx.textAlign = 'center';
                     targetCtx.textBaseline = 'middle';
 
-                    for (let t = secStart; t <= secEnd; t += stepMs) {
-                        if (t === secStart || t === secEnd) continue; // 両端スキップ
+                    // グリッド線描画範囲 (行の端から端まで)
+                    const layoutStartRow = 0;
+                    const layoutEndRow = layoutRowCount;
 
-                        const rect = getRect(t, t, 0, section, isExport); // w,hは使わない
-                        // 線を描く位置: 横ならx固定で縦に、縦ならy固定で横に
+                    for (let t = secStart; t <= secEnd; t += stepMs) {
+                        if (t === secStart || t === secEnd) continue;
+
+                        const rectStart = getRect(t, t, layoutStartRow, section, isExport);
+                        const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
                         
                         targetCtx.beginPath();
                         if (!isVertical) {
-                            // 横: 縦線を引く
-                            // rect.y は行0の開始位置。もっと上から引きたい
-                            // rect.x が時間位置
-                            const lineTop = getRect(t, t, 0, section, isExport).y - 10;
-                            const lineBottom = getRect(t, t, layoutRowCount - 1, section, isExport).y + ROW_SIZE;
-                            targetCtx.moveTo(rect.x, lineTop);
-                            targetCtx.lineTo(rect.x, lineBottom);
-                            targetCtx.fillText(formatTime(new Date(t)), rect.x, lineTop - 10);
+                            // 横表示: 縦線
+                            targetCtx.moveTo(rectStart.x, rectStart.y - 10); // 上へ少しはみ出す
+                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
+                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 15);
                         } else {
-                            // 縦: 横線を引く
-                            const lineLeft = getRect(t, t, 0, section, isExport).x - 10;
-                            const lineRight = getRect(t, t, layoutRowCount - 1, section, isExport).x + ROW_SIZE;
-                            targetCtx.moveTo(lineLeft, rect.y);
-                            targetCtx.lineTo(lineRight, rect.y);
+                            // 縦表示: 横線
+                            targetCtx.moveTo(rectStart.x - 10, rectStart.y);
+                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.textAlign = 'right';
-                            targetCtx.fillText(formatTime(new Date(t)), lineLeft - 5, rect.y);
-                            targetCtx.textAlign = 'center'; // 戻す
+                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 15, rectStart.y);
+                            targetCtx.textAlign = 'center';
                         }
                         targetCtx.stroke();
                     }
@@ -479,154 +459,189 @@
                     targetCtx.font = FONT_L;
 
                     [secStart, secEnd].forEach(t => {
-                        const rect = getRect(t, t, 0, section, isExport);
+                        const rectStart = getRect(t, t, layoutStartRow, section, isExport);
+                        const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
+                        
                         targetCtx.beginPath();
                         if (!isVertical) {
-                            const lineTop = rect.y - 20;
-                            const lineBottom = getRect(t, t, layoutRowCount - 1, section, isExport).y + ROW_SIZE;
-                            targetCtx.moveTo(rect.x, lineTop);
-                            targetCtx.lineTo(rect.x, lineBottom);
-                            targetCtx.fillText(formatTime(new Date(t)), rect.x, lineTop - 10);
+                            targetCtx.moveTo(rectStart.x, rectStart.y - 20);
+                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
+                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 25);
                         } else {
-                            const lineLeft = rect.x - 20;
-                            const lineRight = getRect(t, t, layoutRowCount - 1, section, isExport).x + ROW_SIZE;
-                            targetCtx.moveTo(lineLeft, rect.y);
-                            targetCtx.lineTo(lineRight, rect.y);
+                            targetCtx.moveTo(rectStart.x - 20, rectStart.y);
+                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.textAlign = 'right';
-                            targetCtx.fillText(formatTime(new Date(t)), lineLeft - 5, rect.y);
+                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 25, rectStart.y);
                             targetCtx.textAlign = 'center';
                         }
                         targetCtx.stroke();
                     });
-                    targetCtx.lineWidth = 1; // 戻す
-                }
+                    targetCtx.lineWidth = 1;
 
-                // 3. ブロック描画
-                const normalBlocks = [];
-                const draggingBlockList = [];
-                projectBlocks.forEach(block => {
-                    if (!isExport && isDragging && dragTargetBlock === block) {
-                        draggingBlockList.push(block);
-                    } else {
-                        normalBlocks.push(block);
-                    }
-                });
+                    // 3. ブロック描画 (このセクションに含まれる部分のみ)
+                    const renderBlockInSection = (block, isDragRender) => {
+                        const bStart = new Date(block.startISO).getTime();
+                        const bEnd = new Date(block.endISO).getTime();
 
-                const renderBlock = (block, isDragRender) => {
-                    const start = new Date(block.startISO).getTime();
-                    const end = new Date(block.endISO).getTime();
-                    
-                    // 2段組の場合、どちらのセクションに属するか判定
-                    // またがっている場合は、分割して描画すべきだが、
-                    // 簡易的に「中間点より前なら前半」「後なら後半」に所属させる
-                    // (厳密な分割はUI操作時に複雑になるため)
-                    let section = 0;
-                    if (isTwoColumn && start >= midTimeMs) {
-                        section = 1;
-                    }
+                        // セクションと重なるか判定
+                        if (bEnd <= secStart || bStart >= secEnd) return;
 
-                    let rect = getRect(start, end, block.layoutRow, section, isExport);
+                        // 描画範囲をクリップ
+                        const drawStart = Math.max(bStart, secStart);
+                        const drawEnd = Math.min(bEnd, secEnd);
 
-                    // ドラッグ中の座標上書き
-                    if (isDragRender) {
-                        if (!isVertical) {
-                            rect.x = dragCurrentPos.x; // Xは時間で決まるが、ドラッグ中は追従
-                            rect.y = dragCurrentPos.y;
-                        } else {
-                            rect.x = dragCurrentPos.x;
-                            rect.y = dragCurrentPos.y;
+                        let rect = getRect(drawStart, drawEnd, block.layoutRow, section, isExport);
+
+                        // ドラッグ中の座標上書き (ただし分割表示時はX/Yのどちらかが固定されるべき)
+                        // 今回は簡易的に、ドラッグ中は分割表示せず、マウス位置に追従する単一ブロックとして
+                        // 「最前面」に描画する方針をとるため、ここ（セクションループ内）では
+                        // ドラッグ中のブロックは描画しないのが自然だが、
+                        // ユーザー体験として「分割されたままドラッグ」もありうる。
+                        // ここでは「ドラッグ中はマウス位置にある」として描画する。
+                        // ただし、2段組時のドラッグ描画は複雑になるため、
+                        // 「ドラッグターゲット」はセクションループの外で最後にまとめて描画する。
+                        if (isDragRender) {
+                            return; // ここでは描画しない
                         }
-                        // ドラッグ位置から逆算した時間をCanvas座標に変換してスムーズに見せる処理は
-                        // handleInputMoveで block.startISO を更新しているため、
-                        // getRect で再計算される rect.x (横) または rect.y (縦) は既に新しい時間に基づいている。
-                        // 行方向（交差軸）のみマウス位置に追従させる。
-                        if (!isVertical) {
-                            rect.y = dragCurrentPos.y; // 行方向のみ上書き
-                        } else {
-                            rect.x = dragCurrentPos.x;
-                        }
-                    }
 
-                    targetCtx.fillStyle = block.color;
-                    if (isDragRender) targetCtx.globalAlpha = 0.7;
+                        targetCtx.fillStyle = block.color;
+                        targetCtx.globalAlpha = 1.0;
+                        roundRect(targetCtx, rect.x, rect.y, rect.w, rect.h, 5, true, false);
+
+                        targetCtx.fillStyle = '#ffffff';
+                        targetCtx.font = FONT_L;
+                        targetCtx.save();
+                        targetCtx.beginPath();
+                        targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
+                        targetCtx.clip();
+
+                        if (!isVertical) {
+                            targetCtx.textAlign = 'left';
+                            targetCtx.fillText(block.name, rect.x + 8, rect.y + 20);
+                            targetCtx.font = FONT_S;
+                            // 開始時刻は、ブロック本来の開始時刻がこのセクションに含まれる場合のみ表示
+                            if (bStart >= secStart) targetCtx.fillText(formatTime(new Date(bStart)), rect.x + 8, rect.y + 38);
+                            // 終了時刻
+                            if (bEnd <= secEnd) {
+                                targetCtx.textAlign = 'right';
+                                targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w - 8, rect.y + 38);
+                            }
+                        } else {
+                            targetCtx.textAlign = 'center';
+                            targetCtx.textBaseline = 'top';
+                            targetCtx.fillText(block.name, rect.x + rect.w/2, rect.y + 5);
+                            targetCtx.font = FONT_S;
+                            if (bStart >= secStart) targetCtx.fillText(formatTime(new Date(bStart)), rect.x + rect.w/2, rect.y + 25);
+                            if (bEnd <= secEnd) {
+                                targetCtx.textBaseline = 'bottom';
+                                targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w/2, rect.y + rect.h - 5);
+                            }
+                            targetCtx.textBaseline = 'alphabetic';
+                        }
+                        targetCtx.restore();
+
+                        // ヒットボックス登録 (分割された各パーツを登録)
+                        if (!isExport) {
+                            block.hitBoxes.push({
+                                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+                                section: section
+                            });
+
+                            // 編集モードUI
+                            if (isEditMode) {
+                                const delX = rect.x + rect.w - DELETE_BTN_SIZE + 5;
+                                const delY = rect.y - 5;
+                                targetCtx.fillStyle = 'rgba(220, 53, 69, 1)';
+                                targetCtx.beginPath();
+                                targetCtx.arc(delX, delY, DELETE_BTN_SIZE / 2, 0, Math.PI * 2);
+                                targetCtx.fill();
+                                targetCtx.fillStyle = '#ffffff';
+                                targetCtx.font = 'bold 12px sans-serif';
+                                targetCtx.textAlign = 'center';
+                                targetCtx.textBaseline = 'middle';
+                                targetCtx.fillText('×', delX, delY);
+                                targetCtx.textBaseline = 'alphabetic';
+                                
+                                // 削除ボタンのヒットボックスは配列ではなく単一プロパティで管理していたが、
+                                // 分割時は複数出るため、配列に追加するか、最後の1つだけ有効にする。
+                                // ここでは便宜上、block.deleteHitBoxes 配列を追加して管理する。
+                                if (!block.deleteHitBoxes) block.deleteHitBoxes = [];
+                                block.deleteHitBoxes.push({ 
+                                    x: delX - DELETE_BTN_SIZE/2, 
+                                    y: delY - DELETE_BTN_SIZE/2, 
+                                    width: DELETE_BTN_SIZE, 
+                                    height: DELETE_BTN_SIZE 
+                                });
+                            } else {
+                                block.deleteHitBoxes = [];
+                            }
+                        }
+                    };
+
+                    // 通常ブロック描画
+                    projectBlocks.forEach(b => {
+                        if (b !== dragTargetBlock) renderBlockInSection(b, false);
+                    });
+                } // end section loop
+
+                // 4. ドラッグ中ブロックの描画 (最前面・半透明・マウス追従)
+                if (isDragging && dragTargetBlock) {
+                    // ドラッグ中は分割せず、マウス位置に単一の矩形として表示する方が自然だが、
+                    // 2段組のどちらにいるか分かりにくくなるため、
+                    // 「現在マウスがあるセクション」に基づいて表示する。
+                    // 簡易的に、dragCurrentPos を基点とした矩形を描画。
                     
+                    const bStart = new Date(dragTargetBlock.startISO).getTime();
+                    const bEnd = new Date(dragTargetBlock.endISO).getTime();
+                    const duration = bEnd - bStart;
+                    const length = duration * pxPerMs;
+                    
+                    let rect = { 
+                        x: dragCurrentPos.x, 
+                        y: dragCurrentPos.y, 
+                        w: (!isVertical) ? length : ROW_SIZE * 0.8, 
+                        h: (!isVertical) ? ROW_SIZE * 0.8 : length 
+                    };
+
+                    targetCtx.globalAlpha = 0.7;
+                    targetCtx.fillStyle = dragTargetBlock.color;
                     roundRect(targetCtx, rect.x, rect.y, rect.w, rect.h, 5, true, false);
-                    
                     targetCtx.globalAlpha = 1.0;
+                    
+                    // テキスト (簡易)
                     targetCtx.fillStyle = '#ffffff';
                     targetCtx.font = FONT_L;
-                    
-                    // テキスト描画 (クリッピング)
                     targetCtx.save();
                     targetCtx.beginPath();
                     targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
                     targetCtx.clip();
-
                     if (!isVertical) {
-                        // 横書き
                         targetCtx.textAlign = 'left';
-                        targetCtx.fillText(block.name, rect.x + 8, rect.y + 20);
-                        targetCtx.font = FONT_S;
-                        targetCtx.fillText(formatTime(new Date(start)), rect.x + 8, rect.y + 38);
-                        targetCtx.textAlign = 'right';
-                        targetCtx.fillText(formatTime(new Date(end)), rect.x + rect.w - 8, rect.y + 38);
+                        targetCtx.fillText(dragTargetBlock.name, rect.x + 8, rect.y + 20);
                     } else {
-                        // 縦書き (幅が狭いのでレイアウト調整)
                         targetCtx.textAlign = 'center';
                         targetCtx.textBaseline = 'top';
-                        targetCtx.fillText(block.name, rect.x + rect.w/2, rect.y + 5);
-                        targetCtx.font = FONT_S;
-                        targetCtx.fillText(formatTime(new Date(start)), rect.x + rect.w/2, rect.y + 25);
-                        targetCtx.textBaseline = 'bottom';
-                        targetCtx.fillText(formatTime(new Date(end)), rect.x + rect.w/2, rect.y + rect.h - 5);
+                        targetCtx.fillText(dragTargetBlock.name, rect.x + rect.w/2, rect.y + 5);
                         targetCtx.textBaseline = 'alphabetic';
                     }
                     targetCtx.restore();
+                }
 
-                    if (!isExport) {
-                        // ヒットボックス保存 (画面表示時のみ)
-                        block.hitBox = { x: rect.x, y: rect.y, width: rect.w, height: rect.h };
-                        
-                        if (isEditMode) {
-                            const delX = rect.x + rect.w - DELETE_BTN_SIZE + 5;
-                            const delY = rect.y - 5;
-                            targetCtx.fillStyle = 'rgba(220, 53, 69, 1)';
-                            targetCtx.beginPath();
-                            targetCtx.arc(delX, delY, DELETE_BTN_SIZE / 2, 0, Math.PI * 2);
-                            targetCtx.fill();
-                            targetCtx.fillStyle = '#ffffff';
-                            targetCtx.font = 'bold 12px sans-serif';
-                            targetCtx.textAlign = 'center';
-                            targetCtx.textBaseline = 'middle';
-                            targetCtx.fillText('×', delX, delY);
-                            targetCtx.textBaseline = 'alphabetic';
-                            block.deleteHitBox = { x: delX - DELETE_BTN_SIZE/2, y: delY - DELETE_BTN_SIZE/2, width: DELETE_BTN_SIZE, height: DELETE_BTN_SIZE };
-                        } else {
-                            block.deleteHitBox = null;
-                        }
-                    }
-                };
-
-                normalBlocks.forEach(b => renderBlock(b, false));
-                draggingBlockList.forEach(b => renderBlock(b, true));
-
-                // 4. 画像出力用フッター
+                // 5. 画像出力フッター
                 if (isExport) {
                     const now = new Date();
                     const dateStr = now.toLocaleString('ja-JP');
                     targetCtx.fillStyle = '#888';
                     targetCtx.font = '12px sans-serif';
                     targetCtx.textAlign = 'right';
-                    targetCtx.fillText(`出力日時: ${dateStr}`, targetCtx.canvas.width - 20, targetCtx.canvas.height - 10);
+                    targetCtx.fillText(`出力日時: ${dateStr}`, canvasW - 20, canvasH - 10);
                 }
             }
 
-            // 画面用ラッパー
             function drawCanvas() {
                 drawTimeline(ctx, false);
             }
             
-            // 角丸矩形
             function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
                 if (typeof stroke === 'undefined') { stroke = true; }
                 if (typeof radius === 'undefined') { radius = 5; }
@@ -645,224 +660,7 @@
                 if (stroke) { ctx.stroke(); }
             }
 
-            // --- 3. イベントリスナー (ボタン) ---
-
-            projectNameEl.addEventListener('click', () => {
-                const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
-                if (newName && newName.trim() !== '') {
-                    currentProjectName = newName.trim();
-                    projectNameEl.textContent = currentProjectName;
-                    saveToLocalStorage(); 
-                }
-            });
-
-            // 縦横切替
-            document.getElementById('toggle-view-btn').addEventListener('click', (e) => {
-                isVertical = !isVertical;
-                // 無効化解除
-                e.target.disabled = false; 
-                drawCanvas();
-            });
-            
-            // 2段組切替
-            document.getElementById('two-column-toggle').addEventListener('change', (e) => {
-                isTwoColumn = e.target.checked;
-                drawCanvas();
-            });
-
-            // 初期化時にボタン有効化
-            document.getElementById('toggle-view-btn').disabled = false;
-            document.getElementById('two-column-toggle').disabled = false;
-
-
-            document.getElementById('add-block-btn').addEventListener('click', () => {
-                editingBlockId = null; 
-                document.getElementById('block-modal-title').textContent = 'ブロック追加';
-                document.getElementById('block-edit-form').reset();
-                document.getElementById('block-id').value = '';
-                
-                const now = new Date();
-                const yyyyMMdd = now.toISOString().split('T')[0];
-                const hhMM = now.toTimeString().substring(0, 5);
-                document.getElementById('block-start-date').value = yyyyMMdd;
-                document.getElementById('block-start-time').value = hhMM;
-                document.getElementById('block-end-date').value = yyyyMMdd;
-                document.getElementById('block-end-time').value = hhMM;
-
-                blockColorInput.value = colors[0];
-                 Array.from(colorPicker.children).forEach((child, index) => {
-                    child.style.borderColor = (index === 0) ? '#333' : 'transparent';
-                });
-                showModal('block-edit-modal');
-            });
-            
-            document.getElementById('edit-mode-btn').addEventListener('click', (e) => {
-                isEditMode = !isEditMode;
-                const btn = e.currentTarget;
-                if (isEditMode) {
-                    btn.innerHTML = '<i class="fa-solid fa-check"></i> 編集モード終了';
-                    btn.classList.add('btn-primary');
-                    btn.classList.remove('btn-secondary');
-                    canvas.classList.add('edit-mode-active');
-                } else {
-                    btn.innerHTML = '<i class="fa-solid fa-pen"></i> 編集モード';
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                    canvas.classList.remove('edit-mode-active');
-                }
-                drawCanvas(); 
-            });
-
-            document.getElementById('reset-btn').addEventListener('click', () => {
-                if (confirm('プロジェクトをリセットしますか？\n（すべてのブロックが削除されます）')) {
-                    projectBlocks = [];
-                    saveToLocalStorage();
-                    drawCanvas();
-                }
-            });
-
-            document.getElementById('save-btn').addEventListener('click', () => {
-                const user = getUserSession();
-                if (!user) {
-                    alert('プロジェクトを保存するにはログインが必要です。');
-                    sessionStorage.setItem('login_redirect_reason', 'save');
-                    window.location.href = 'login.html';
-                    return;
-                }
-                saveProjectData(user.username);
-            });
-
-            document.getElementById('export-img-btn').addEventListener('click', () => {
-                if (projectBlocks.length === 0) {
-                    alert('出力するブロックがありません。');
-                    return;
-                }
-                try {
-                    const exportCanvas = document.createElement('canvas');
-                    const exportCtx = exportCanvas.getContext('2d');
-                    drawTimeline(exportCtx, true); // isExport=true
-                    
-                    const dataUrl = exportCanvas.toDataURL('image/png');
-                    const now = new Date();
-                    const yyyy = now.getFullYear();
-                    const MM = String(now.getMonth() + 1).padStart(2, '0');
-                    const dd = String(now.getDate()).padStart(2, '0');
-                    const HH = String(now.getHours()).padStart(2, '0');
-                    const mm = String(now.getMinutes()).padStart(2, '0');
-                    const fileName = `${currentProjectName}_${yyyy}${MM}${dd}_${HH}${mm}.png`;
-
-                    const link = document.createElement('a');
-                    link.download = fileName;
-                    link.href = dataUrl;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                } catch (e) {
-                    console.error('画像出力エラー:', e);
-                    alert('画像の出力に失敗しました。');
-                }
-            });
-
-            // --- 4. イベントリスナー (モーダル) ---
-
-            setupModalClose('block-edit-modal', '#cancel-block-edit-btn');
-            const blockEditForm = document.getElementById('block-edit-form');
-            const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#64748B'];
-            const colorPicker = document.getElementById('color-picker');
-            const blockColorInput = document.getElementById('block-color');
-
-            colors.forEach(color => {
-                const colorCircle = document.createElement('div');
-                colorCircle.style.width = '30px';
-                colorCircle.style.height = '30px';
-                colorCircle.style.borderRadius = '50%';
-                colorCircle.style.backgroundColor = color;
-                colorCircle.style.cursor = 'pointer';
-                colorCircle.style.border = '3px solid transparent';
-                colorCircle.dataset.color = color;
-                
-                if (color === blockColorInput.value) {
-                    colorCircle.style.borderColor = '#333';
-                }
-
-                colorCircle.addEventListener('click', () => {
-                    blockColorInput.value = color;
-                    Array.from(colorPicker.children).forEach(child => {
-                        child.style.borderColor = 'transparent';
-                    });
-                    colorCircle.style.borderColor = '#333';
-                });
-                colorPicker.appendChild(colorCircle);
-            });
-
-            blockEditForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const name = document.getElementById('block-name').value;
-                const startDate = document.getElementById('block-start-date').value;
-                const startTime = document.getElementById('block-start-time').value;
-                const endDate = document.getElementById('block-end-date').value;
-                const endTime = document.getElementById('block-end-time').value;
-                const color = document.getElementById('block-color').value;
-
-                if (!name || !startDate || !startTime || !endDate || !endTime) {
-                    alert('すべての日時を入力してください。');
-                    return;
-                }
-                const startISO = new Date(`${startDate}T${startTime}`).toISOString();
-                const endISO = new Date(`${endDate}T${endTime}`).toISOString();
-
-                if (new Date(endISO) <= new Date(startISO)) {
-                    alert('終了日時は開始日時より後に設定してください。');
-                    return;
-                }
-
-                const blockData = { name, startISO, endISO, color };
-
-                if (editingBlockId) {
-                    const index = projectBlocks.findIndex(b => b.id === editingBlockId);
-                    if (index !== -1) {
-                        projectBlocks[index] = { ...projectBlocks[index], ...blockData };
-                    }
-                } else {
-                    const newBlock = {
-                        ...blockData,
-                        id: Date.now().toString(),
-                        layoutRow: -1
-                    };
-                    newBlock.layoutRow = findAvailableRow(newBlock);
-                    projectBlocks.push(newBlock);
-                }
-                
-                editingBlockId = null; 
-                saveToLocalStorage();
-                drawCanvas();
-                hideModal('block-edit-modal');
-            });
-
-            // --- 5. イベントリスナー (Canvas操作) ---
-
-            function openEditModal(block) {
-                editingBlockId = block.id; 
-                document.getElementById('block-modal-title').textContent = 'ブロック編集';
-                
-                document.getElementById('block-id').value = block.id;
-                document.getElementById('block-name').value = block.name;
-                
-                const start = new Date(block.startISO);
-                const end = new Date(block.endISO);
-                
-                document.getElementById('block-start-date').value = start.toISOString().split('T')[0];
-                document.getElementById('block-start-time').value = start.toTimeString().substring(0, 5);
-                document.getElementById('block-end-date').value = end.toISOString().split('T')[0];
-                document.getElementById('block-end-time').value = end.toTimeString().substring(0, 5);
-
-                blockColorInput.value = block.color;
-                Array.from(colorPicker.children).forEach(child => {
-                    child.style.borderColor = (child.dataset.color === block.color) ? '#333' : 'transparent';
-                });
-
-                showModal('block-edit-modal');
-            }
+            // --- イベント処理 (一部変更) ---
 
             function getCanvasCoordinates(e) {
                 const rect = canvas.getBoundingClientRect();
@@ -879,59 +677,73 @@
                     handleClickInEditMode(e);
                     return;
                 }
-
                 const pos = getCanvasCoordinates(e);
                 
                 for (const block of [...projectBlocks].reverse()) {
-                    if (!block.hitBox) continue;
-                    const h = block.hitBox;
-                    if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
-                        isDragging = true;
-                        dragTargetBlock = block;
-                        // 軸方向のドラッグ開始位置とオフセット
-                        if (!isVertical) {
-                            dragStartPos.x = pos.x;
-                            dragOffset = pos.x - timeToX(new Date(block.startISO).getTime()); // 正確な時間位置との差
-                            dragCrossOffset = pos.y - h.y;
-                        } else {
-                            dragStartPos.y = pos.y;
-                            dragOffset = pos.y - timeToX(new Date(block.startISO).getTime());
-                            dragCrossOffset = pos.x - h.x;
+                    // 分割されたhitBoxesのいずれかにヒットすればOK
+                    if (!block.hitBoxes) continue;
+                    for (const h of block.hitBoxes) {
+                        if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
+                            isDragging = true;
+                            dragTargetBlock = block;
+                            
+                            // ドラッグ開始位置オフセット
+                            // ※2段組で分割されている場合、時間のオフセット計算は
+                            // 「ヒットしたセクション」を基準にする必要があるが、
+                            // ここでは簡易的にマウス位置をそのまま基準にする
+                            
+                            if (!isVertical) {
+                                dragStartPos.x = pos.x;
+                                dragOffset = 0; // 相対移動量のみ使うので0
+                                dragCrossOffset = pos.y - h.y;
+                            } else {
+                                dragStartPos.y = pos.y;
+                                dragOffset = 0;
+                                dragCrossOffset = pos.x - h.x;
+                            }
+                            
+                            // ドラッグ初期位置 = マウス位置 - ブロック内オフセット
+                            dragCurrentPos = { 
+                                x: pos.x - (isVertical ? dragCrossOffset : 0), 
+                                y: pos.y - (isVertical ? 0 : dragCrossOffset) 
+                            };
+                            
+                            dragOriginalStartMs = new Date(block.startISO).getTime();
+                            dragOriginalEndMs = new Date(block.endISO).getTime();
+                            dragOriginalRow = block.layoutRow; 
+                            
+                            canvas.classList.add('dragging');
+                            if (e.type === 'touchstart') e.preventDefault(); 
+                            return; // ループ抜け
                         }
-                        
-                        dragCurrentPos = { x: h.x, y: h.y };
-                        
-                        dragOriginalStartMs = new Date(block.startISO).getTime();
-                        dragOriginalEndMs = new Date(block.endISO).getTime();
-                        dragOriginalRow = block.layoutRow; 
-                        
-                        canvas.classList.add('dragging');
-                        if (e.type === 'touchstart') e.preventDefault(); 
-                        break;
                     }
                 }
             }
 
             function handleClickInEditMode(e) {
                 const pos = getCanvasCoordinates(e);
-                
                 for (const block of [...projectBlocks].reverse()) {
-                    if (!block.hitBox) continue;
-                    
-                    const d = block.deleteHitBox;
-                    if (d && pos.x >= d.x && pos.x <= d.x + d.width && pos.y >= d.y && pos.y <= d.y + d.height) {
-                        if (confirm(`「${block.name}」を本当に削除しますか？`)) {
-                            projectBlocks = projectBlocks.filter(b => b.id !== block.id);
-                            saveToLocalStorage();
-                            drawCanvas();
+                    // 削除ボタン判定
+                    if (block.deleteHitBoxes) {
+                        for (const d of block.deleteHitBoxes) {
+                            if (pos.x >= d.x && pos.x <= d.x + d.width && pos.y >= d.y && pos.y <= d.y + d.height) {
+                                if (confirm(`「${block.name}」を本当に削除しますか？`)) {
+                                    projectBlocks = projectBlocks.filter(b => b.id !== block.id);
+                                    saveToLocalStorage();
+                                    drawCanvas();
+                                }
+                                return;
+                            }
                         }
-                        return;
                     }
-                    
-                    const h = block.hitBox;
-                    if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
-                        openEditModal(block);
-                        return;
+                    // 本体判定
+                    if (block.hitBoxes) {
+                        for (const h of block.hitBoxes) {
+                            if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
+                                openEditModal(block);
+                                return;
+                            }
+                        }
                     }
                 }
             }
@@ -941,25 +753,18 @@
                 e.preventDefault(); 
                 const pos = getCanvasCoordinates(e);
                 
-                // 時間更新 (メイン軸)
                 let deltaMs = 0;
+                // 移動量計算
                 if (!isVertical) {
-                    // 横表示: X軸が時間
-                    const newX = pos.x - dragOffset;
-                    const timeX = newX - PADDING_MAIN; 
-                    // timeX = (ms - min) * pxPerMs
-                    const currentMs = (timeX / pxPerMs) + minTimeMs;
-                    deltaMs = currentMs - dragOriginalStartMs;
-                    dragCurrentPos.x = newX;
-                    dragCurrentPos.y = pos.y - dragCrossOffset; // Yはマウス追従
+                    const deltaPixel = pos.x - dragStartPos.x;
+                    deltaMs = deltaPixel / pxPerMs;
+                    dragCurrentPos.x = pos.x; // 横: 追従（実際には描画関数で補正）
+                    dragCurrentPos.y = pos.y - dragCrossOffset; 
                 } else {
-                    // 縦表示: Y軸が時間
-                    const newY = pos.y - dragOffset;
-                    const timeY = newY - PADDING_MAIN;
-                    const currentMs = (timeY / pxPerMs) + minTimeMs;
-                    deltaMs = currentMs - dragOriginalStartMs;
-                    dragCurrentPos.y = newY;
-                    dragCurrentPos.x = pos.x - dragCrossOffset; // Xはマウス追従
+                    const deltaPixel = pos.y - dragStartPos.y;
+                    deltaMs = deltaPixel / pxPerMs;
+                    dragCurrentPos.y = pos.y;
+                    dragCurrentPos.x = pos.x - dragCrossOffset;
                 }
 
                 const newStartMs = dragOriginalStartMs + deltaMs;
@@ -975,76 +780,54 @@
                     isDragging = false;
                     canvas.classList.remove('dragging');
                     
-                    // ドロップ位置の行判定
-                    let dropRow = 0;
-                    const topMargin = 0; // 画面表示時はヘッダーなし
-                    // 交差軸の座標から行を計算
-                    if (!isVertical) {
-                        // 横表示: Y座標で判定
-                        // PADDING_CROSS + (row * ROW_SIZE) = y
-                        // row = (y - PADDING_CROSS) / ROW_SIZE
-                        
-                        // 2段組の場合のオフセット考慮
-                        let baseCross = 0;
-                        if (isTwoColumn) {
-                            // 下段(section 1)エリアかどうかの判定が必要だが、
-                            // 簡易的にマウスY座標全体から行を算出する
-                            // ただし、2段組時の行判定は複雑になるため、
-                            // 今回は「ドラッグ位置の絶対座標」から単純に行を割り出す
-                            // (上段・下段の区別なく、Y座標だけで行が決まるシンプルなモデルにする)
-                            // 実際には 2段組時のドラッグ移動は表示上の行に制限されるべきだが、
-                            // スワップロジックを優先し、レイアウト計算は自動化に任せず、
-                            // ここで強制的に行を決定する。
-                            
-                            // 下段エリアの開始Y
-                            const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                            if (dragCurrentPos.y >= lowerStart) {
-                                // 下段とみなす？ -> いや、ブロック自体は startISO に基づいてセクションが決まるため、
-                                // Y座標だけで行を変えても、時間が変わらない限りセクションは移動しない。
-                                // したがって、行番号の決定はセクション内相対座標で行う。
-                                let relativeY = dragCurrentPos.y;
-                                if (dragCurrentPos.y >= lowerStart) {
-                                    relativeY -= (lowerStart - PADDING_CROSS);
-                                }
-                                dropRow = Math.round((relativeY - PADDING_CROSS) / ROW_SIZE);
-                            } else {
-                                dropRow = Math.round((dragCurrentPos.y - PADDING_CROSS) / ROW_SIZE);
-                            }
-                        } else {
-                            dropRow = Math.round((dragCurrentPos.y - PADDING_CROSS) / ROW_SIZE);
-                        }
-                    } else {
-                        // 縦表示: X座標で判定
-                        if (isTwoColumn) {
-                            const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                            let relativeX = dragCurrentPos.x;
-                            if (dragCurrentPos.x >= rightStart) {
-                                relativeX -= (rightStart - PADDING_CROSS);
-                            }
-                            dropRow = Math.round((relativeX - PADDING_CROSS) / ROW_SIZE);
-                        } else {
-                            dropRow = Math.round((dragCurrentPos.x - PADDING_CROSS) / ROW_SIZE);
-                        }
-                    }
-
-                    if (dropRow < 0) dropRow = 0;
+                    // ドロップ位置の行判定 (中央揃えオフセットを考慮して逆算)
+                    // y = PADDING + OFFSET + (row * SIZE)
+                    // row = (y - PADDING - OFFSET) / SIZE
                     
-                    // --- スワップロジック ---
+                    let dropRow = 0;
+                    let targetCoord = 0;
+                    
+                    // 2段組の場合、マウス座標が「どのセクション領域」にあるか判定し、
+                    // セクションのオフセットを引く必要があるが、
+                    // 今回は「行番号」はセクションに関わらず 0~N なので、
+                    // 単純にローカル座標系での相対位置から算出する。
+                    
+                    if (!isVertical) {
+                        // 横表示: Y座標
+                        let relY = dragCurrentPos.y - contentOffsetY;
+                        
+                        // 2段組の下段にいる場合
+                        const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
+                        if (isTwoColumn && relY >= lowerStart) {
+                            relY -= (lowerStart - PADDING_CROSS); // 上段基準に戻す
+                        }
+                        targetCoord = relY;
+                    } else {
+                        // 縦表示: X座標
+                        let relX = dragCurrentPos.x - contentOffsetX;
+                        const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
+                        if (isTwoColumn && relX >= rightStart) {
+                            relX -= (rightStart - PADDING_CROSS);
+                        }
+                        targetCoord = relX;
+                    }
+                    
+                    dropRow = Math.round((targetCoord - PADDING_CROSS) / ROW_SIZE);
+                    if (dropRow < 0) dropRow = 0;
+
+                    // スワップ処理
                     const targetStart = new Date(dragTargetBlock.startISO).getTime();
                     const targetEnd = new Date(dragTargetBlock.endISO).getTime();
 
-                    // ドロップ先の行で、時間が被っているブロックを探す
                     const conflictingBlocks = projectBlocks.filter(b => {
                         if (b === dragTargetBlock) return false;
                         if (b.layoutRow !== dropRow) return false;
-                        
                         const bStart = new Date(b.startISO).getTime();
                         const bEnd = new Date(b.endISO).getTime();
                         return targetStart < bEnd && targetEnd > bStart;
                     });
 
                     if (conflictingBlocks.length > 0) {
-                        // 衝突したブロックを、ドラッグ開始時の行に飛ばす
                         conflictingBlocks.forEach(b => {
                             b.layoutRow = dragOriginalRow;
                         });
@@ -1058,21 +841,203 @@
                 }
             }
 
+            // --- イベントリスナー登録 (既存と同じ) ---
+            projectNameEl.addEventListener('click', () => {
+                const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
+                if (newName && newName.trim() !== '') {
+                    currentProjectName = newName.trim();
+                    projectNameEl.textContent = currentProjectName;
+                    saveToLocalStorage(); 
+                }
+            });
+            document.getElementById('toggle-view-btn').addEventListener('click', (e) => {
+                isVertical = !isVertical;
+                e.target.disabled = false; 
+                drawCanvas();
+            });
+            document.getElementById('two-column-toggle').addEventListener('change', (e) => {
+                isTwoColumn = e.target.checked;
+                drawCanvas();
+            });
+            document.getElementById('toggle-view-btn').disabled = false;
+            document.getElementById('two-column-toggle').disabled = false;
+
+            document.getElementById('add-block-btn').addEventListener('click', () => {
+                editingBlockId = null; 
+                document.getElementById('block-modal-title').textContent = 'ブロック追加';
+                document.getElementById('block-edit-form').reset();
+                document.getElementById('block-id').value = '';
+                const now = new Date();
+                const yyyyMMdd = now.toISOString().split('T')[0];
+                const hhMM = now.toTimeString().substring(0, 5);
+                document.getElementById('block-start-date').value = yyyyMMdd;
+                document.getElementById('block-start-time').value = hhMM;
+                document.getElementById('block-end-date').value = yyyyMMdd;
+                document.getElementById('block-end-time').value = hhMM;
+                const blockColorInput = document.getElementById('block-color');
+                const colorPicker = document.getElementById('color-picker');
+                blockColorInput.value = '#3B82F6';
+                 Array.from(colorPicker.children).forEach((child, index) => {
+                    child.style.borderColor = (index === 0) ? '#333' : 'transparent';
+                });
+                showModal('block-edit-modal');
+            });
+            document.getElementById('edit-mode-btn').addEventListener('click', (e) => {
+                isEditMode = !isEditMode;
+                const btn = e.currentTarget;
+                if (isEditMode) {
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> 編集モード終了';
+                    btn.classList.add('btn-primary');
+                    btn.classList.remove('btn-secondary');
+                    canvas.classList.add('edit-mode-active');
+                } else {
+                    btn.innerHTML = '<i class="fa-solid fa-pen"></i> 編集モード';
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                    canvas.classList.remove('edit-mode-active');
+                }
+                drawCanvas(); 
+            });
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                if (confirm('プロジェクトをリセットしますか？\n（すべてのブロックが削除されます）')) {
+                    projectBlocks = [];
+                    saveToLocalStorage();
+                    drawCanvas();
+                }
+            });
+            document.getElementById('save-btn').addEventListener('click', () => {
+                const user = getUserSession();
+                if (!user) {
+                    alert('プロジェクトを保存するにはログインが必要です。');
+                    sessionStorage.setItem('login_redirect_reason', 'save');
+                    window.location.href = 'login.html';
+                    return;
+                }
+                saveProjectData(user.username);
+            });
+            document.getElementById('export-img-btn').addEventListener('click', () => {
+                if (projectBlocks.length === 0) {
+                    alert('出力するブロックがありません。');
+                    return;
+                }
+                try {
+                    const exportCanvas = document.createElement('canvas');
+                    const exportCtx = exportCanvas.getContext('2d');
+                    drawTimeline(exportCtx, true); 
+                    const dataUrl = exportCanvas.toDataURL('image/png');
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const MM = String(now.getMonth() + 1).padStart(2, '0');
+                    const dd = String(now.getDate()).padStart(2, '0');
+                    const HH = String(now.getHours()).padStart(2, '0');
+                    const mm = String(now.getMinutes()).padStart(2, '0');
+                    const fileName = `${currentProjectName}_${yyyy}${MM}${dd}_${HH}${mm}.png`;
+                    const link = document.createElement('a');
+                    link.download = fileName;
+                    link.href = dataUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (e) {
+                    console.error('画像出力エラー:', e);
+                    alert('画像の出力に失敗しました。');
+                }
+            });
+
+            // モーダル設定などは変更なし (省略せず記述)
+            setupModalClose('block-edit-modal', '#cancel-block-edit-btn');
+            const blockEditForm = document.getElementById('block-edit-form');
+            const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#64748B'];
+            const colorPicker = document.getElementById('color-picker');
+            const blockColorInput = document.getElementById('block-color');
+            colors.forEach(color => {
+                const colorCircle = document.createElement('div');
+                colorCircle.style.width = '30px';
+                colorCircle.style.height = '30px';
+                colorCircle.style.borderRadius = '50%';
+                colorCircle.style.backgroundColor = color;
+                colorCircle.style.cursor = 'pointer';
+                colorCircle.style.border = '3px solid transparent';
+                colorCircle.dataset.color = color;
+                if (color === blockColorInput.value) {
+                    colorCircle.style.borderColor = '#333';
+                }
+                colorCircle.addEventListener('click', () => {
+                    blockColorInput.value = color;
+                    Array.from(colorPicker.children).forEach(child => {
+                        child.style.borderColor = 'transparent';
+                    });
+                    colorCircle.style.borderColor = '#333';
+                });
+                colorPicker.appendChild(colorCircle);
+            });
+            blockEditForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('block-name').value;
+                const startDate = document.getElementById('block-start-date').value;
+                const startTime = document.getElementById('block-start-time').value;
+                const endDate = document.getElementById('block-end-date').value;
+                const endTime = document.getElementById('block-end-time').value;
+                const color = document.getElementById('block-color').value;
+                if (!name || !startDate || !startTime || !endDate || !endTime) {
+                    alert('すべての日時を入力してください。');
+                    return;
+                }
+                const startISO = new Date(`${startDate}T${startTime}`).toISOString();
+                const endISO = new Date(`${endDate}T${endTime}`).toISOString();
+                if (new Date(endISO) <= new Date(startISO)) {
+                    alert('終了日時は開始日時より後に設定してください。');
+                    return;
+                }
+                const blockData = { name, startISO, endISO, color };
+                if (editingBlockId) {
+                    const index = projectBlocks.findIndex(b => b.id === editingBlockId);
+                    if (index !== -1) {
+                        projectBlocks[index] = { ...projectBlocks[index], ...blockData };
+                    }
+                } else {
+                    const newBlock = {
+                        ...blockData,
+                        id: Date.now().toString(),
+                        layoutRow: -1
+                    };
+                    newBlock.layoutRow = findAvailableRow(newBlock);
+                    projectBlocks.push(newBlock);
+                }
+                editingBlockId = null; 
+                saveToLocalStorage();
+                drawCanvas();
+                hideModal('block-edit-modal');
+            });
+
+            function openEditModal(block) {
+                editingBlockId = block.id; 
+                document.getElementById('block-modal-title').textContent = 'ブロック編集';
+                document.getElementById('block-id').value = block.id;
+                document.getElementById('block-name').value = block.name;
+                const start = new Date(block.startISO);
+                const end = new Date(block.endISO);
+                document.getElementById('block-start-date').value = start.toISOString().split('T')[0];
+                document.getElementById('block-start-time').value = start.toTimeString().substring(0, 5);
+                document.getElementById('block-end-date').value = end.toISOString().split('T')[0];
+                document.getElementById('block-end-time').value = end.toTimeString().substring(0, 5);
+                blockColorInput.value = block.color;
+                Array.from(colorPicker.children).forEach(child => {
+                    child.style.borderColor = (child.dataset.color === block.color) ? '#333' : 'transparent';
+                });
+                showModal('block-edit-modal');
+            }
+
             canvas.addEventListener('mousedown', handleInputStart);
             canvas.addEventListener('mousemove', handleInputMove);
             canvas.addEventListener('mouseup', handleInputEnd);
             canvas.addEventListener('mouseleave', handleInputEnd);
-
             canvas.addEventListener('touchstart', handleInputStart, {passive: false});
             canvas.addEventListener('touchmove', handleInputMove, {passive: false});
             canvas.addEventListener('touchend', handleInputEnd);
 
-
-            // --- 6. 最終初期化処理 ---
-
             const urlParams = new URLSearchParams(window.location.search);
             const loadedCsvData = sessionStorage.getItem('bloske_loaded_csv');
-            
             if (loadedCsvData) {
                 currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '読み込みプロジェクト';
                 projectBlocks = parseCsvData(loadedCsvData);
@@ -1091,17 +1056,14 @@
 
             async function saveProjectData(username) {
                 const projectName = projectNameEl.textContent;
-                
                 let csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; 
                 projectBlocks.forEach(block => {
                     const name = `"${block.name.replace(/"/g, '""')}"`;
                     csvData += `${name},"${block.startISO}","${block.endISO}","${block.color}"\n`;
                 });
-                
                 if (!confirm(`プロジェクト「${projectName}」を保存しますか？`)) {
                     return;
                 }
-
                 try {
                     await callGasApi('saveProject', {
                         username: username,
