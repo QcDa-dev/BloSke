@@ -14,8 +14,8 @@
     <link rel="stylesheet" href="common.css">
 
     <!-- Firebase SDK (common.js より先に読み込む) -->
-    <script src="[https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js)"></script>
-    <script src="[https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js](https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js)"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 
     <!-- このページ専用のスタイル -->
     <style>
@@ -133,7 +133,7 @@
             const PADDING_MAIN = 60;  
             const PADDING_CROSS = 40; 
             const ROW_SIZE = 60;      
-            const GAP_2COL = 100; // 修正: 2段組の間隔を広げる
+            const GAP_2COL = 100; 
             const DELETE_BTN_SIZE = 20;
             const HEADER_HEIGHT_EXPORT = 80; 
             
@@ -142,7 +142,7 @@
             const FONT_L = 'bold 14px sans-serif';
             const FONT_TITLE = 'bold 24px sans-serif';
             
-            let projectBlocks = []; // {..., hitBoxes: []}
+            let projectBlocks = []; 
             let currentProjectName = '新規プロジェクト';
             let isEditMode = false;
             let editingBlockId = null;
@@ -156,18 +156,18 @@
             let pxPerMs = 0; 
             let layoutRowCount = 0; 
             
-            // 描画オフセット（中央揃え用）
             let contentOffsetX = 0;
             let contentOffsetY = 0;
 
             let isDragging = false;
             let dragTargetBlock = null;
-            let dragStartX = 0;
+            let dragStartX = 0; // ドラッグ開始時のマウス座標 (メイン軸)
+            let dragStartY = 0; // ドラッグ開始時のマウス座標 (交差軸)
             let dragOriginalStartMs = 0;
             let dragOriginalEndMs = 0;
             let dragOriginalRow = 0; 
-            let dragOffset = 0; 
-            let dragCrossOffset = 0; 
+            let dragOffset = 0; // マウスとブロック左端(上端)の差分
+            let dragCrossOffset = 0; // マウスとブロック上端(左端)の差分
             let dragCurrentPos = { x: 0, y: 0 };
 
             const appIcon = new Image();
@@ -288,7 +288,6 @@
 
             function getRect(timeStart, timeEnd, row, section, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
-                
                 const midTimeMs = minTimeMs + (totalDurationMs / 2);
                 const sectionStartMs = (section === 0) ? minTimeMs : midTimeMs;
                 
@@ -322,12 +321,10 @@
                 }
             }
 
-            // テキストの改行処理ヘルパー
             function wrapText(ctx, text, maxWidth) {
                 const words = text.split('');
                 let lines = [];
                 let currentLine = words[0];
-
                 for (let i = 1; i < words.length; i++) {
                     const word = words[i];
                     const width = ctx.measureText(currentLine + word).width;
@@ -344,7 +341,6 @@
 
             function drawTimeline(targetCtx, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
-                
                 assignLayoutRows();
                 updateTimelineBounds();
                 calculateRowCount();
@@ -485,9 +481,7 @@
 
                         let rect = getRect(drawStart, drawEnd, block.layoutRow, section, isExport);
 
-                        if (isDragRender) {
-                            return; 
-                        }
+                        if (isDragRender) return; 
 
                         targetCtx.fillStyle = block.color;
                         targetCtx.globalAlpha = 1.0;
@@ -496,7 +490,6 @@
                         targetCtx.fillStyle = '#ffffff';
                         targetCtx.font = FONT_L;
                         
-                        // テキスト描画（修正）
                         if (!isVertical) {
                             targetCtx.save();
                             targetCtx.beginPath();
@@ -512,14 +505,12 @@
                             }
                             targetCtx.restore();
                         } else {
-                            // 縦表示の場合
+                            // 縦表示
                             targetCtx.save();
-                            // クリップエリアは名前用
                             targetCtx.beginPath();
                             targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
                             targetCtx.clip();
                             
-                            // ブロック名（改行処理）
                             targetCtx.textAlign = 'center';
                             targetCtx.textBaseline = 'middle';
                             const lines = wrapText(targetCtx, block.name, rect.w - 10);
@@ -531,7 +522,6 @@
                             });
                             targetCtx.restore();
 
-                            // 時間（ブロック外）
                             targetCtx.font = FONT_S;
                             targetCtx.fillStyle = '#333';
                             targetCtx.textAlign = 'center';
@@ -586,6 +576,7 @@
                 } 
 
                 if (isDragging && dragTargetBlock) {
+                    // ドラッグ中はシンプルに描画（マウス追従）
                     const bStart = new Date(dragTargetBlock.startISO).getTime();
                     const bEnd = new Date(dragTargetBlock.endISO).getTime();
                     const duration = bEnd - bStart;
@@ -613,7 +604,6 @@
                         targetCtx.textAlign = 'left';
                         targetCtx.fillText(dragTargetBlock.name, rect.x + 8, rect.y + 20);
                     } else {
-                        // ドラッグ中は簡略表示
                         targetCtx.textAlign = 'center';
                         targetCtx.textBaseline = 'top';
                         targetCtx.fillText(dragTargetBlock.name, rect.x + rect.w/2, rect.y + 5);
@@ -681,18 +671,21 @@
                             dragTargetBlock = block;
                             
                             if (!isVertical) {
-                                dragStartPos.x = pos.x;
-                                dragOffset = 0; 
-                                dragCrossOffset = pos.y - h.y;
+                                dragStartX = pos.x;
+                                dragStartY = pos.y;
+                                dragOffset = pos.x - h.x; // マウスとブロック左端の差
+                                dragCrossOffset = pos.y - h.y; // マウスとブロック上端の差
                             } else {
-                                dragStartPos.y = pos.y;
-                                dragOffset = 0;
+                                dragStartX = pos.x;
+                                dragStartY = pos.y;
+                                dragOffset = pos.y - h.y; 
                                 dragCrossOffset = pos.x - h.x;
                             }
                             
+                            // 初期位置計算
                             dragCurrentPos = { 
-                                x: pos.x - (isVertical ? dragCrossOffset : 0), 
-                                y: pos.y - (isVertical ? 0 : dragCrossOffset) 
+                                x: pos.x - (isVertical ? dragCrossOffset : dragOffset), 
+                                y: pos.y - (isVertical ? dragOffset : dragCrossOffset) 
                             };
                             
                             dragOriginalStartMs = new Date(block.startISO).getTime();
@@ -740,14 +733,14 @@
                 
                 let deltaMs = 0;
                 if (!isVertical) {
-                    const deltaPixel = pos.x - dragStartPos.x;
+                    const deltaPixel = pos.x - dragStartX;
                     deltaMs = deltaPixel / pxPerMs;
-                    dragCurrentPos.x = pos.x; 
+                    dragCurrentPos.x = pos.x - dragOffset; 
                     dragCurrentPos.y = pos.y - dragCrossOffset; 
                 } else {
-                    const deltaPixel = pos.y - dragStartPos.y;
+                    const deltaPixel = pos.y - dragStartY;
                     deltaMs = deltaPixel / pxPerMs;
-                    dragCurrentPos.y = pos.y;
+                    dragCurrentPos.y = pos.y - dragOffset;
                     dragCurrentPos.x = pos.x - dragCrossOffset;
                 }
 
@@ -767,7 +760,9 @@
                     let dropRow = 0;
                     let targetCoord = 0;
                     
+                    // ドロップ位置の行判定
                     if (!isVertical) {
+                        // 横表示: Y座標
                         let relY = dragCurrentPos.y - contentOffsetY;
                         const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relY >= lowerStart) {
@@ -775,6 +770,7 @@
                         }
                         targetCoord = relY;
                     } else {
+                        // 縦表示: X座標
                         let relX = dragCurrentPos.x - contentOffsetX;
                         const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relX >= rightStart) {
@@ -789,21 +785,22 @@
                     const targetStart = new Date(dragTargetBlock.startISO).getTime();
                     const targetEnd = new Date(dragTargetBlock.endISO).getTime();
 
-                    // 重複チェック (修正: 重複時は別の行に移動)
+                    // 重複チェック＆行移動 (スワップではなく押し出し/移動)
                     let finalRow = dropRow;
                     let attempts = 0;
                     while (true) {
-                        if (attempts > layoutRowCount + 5) break; // 無限ループ防止
+                        if (attempts > layoutRowCount + 10) break; // 無限ループ防止
                         const conflicting = projectBlocks.some(b => {
                             if (b === dragTargetBlock) return false;
                             if (b.layoutRow !== finalRow) return false;
                             const bStart = new Date(b.startISO).getTime();
                             const bEnd = new Date(b.endISO).getTime();
+                            // 重なり判定
                             return targetStart < bEnd && targetEnd > bStart;
                         });
                         
                         if (!conflicting) break;
-                        finalRow++; // 次の行へ
+                        finalRow++; 
                         attempts++;
                     }
 
@@ -815,7 +812,7 @@
                 }
             }
 
-            // --- イベントリスナー登録 ---
+            // ... イベントリスナー登録 ...
             projectNameEl.addEventListener('click', () => {
                 const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
                 if (newName && newName.trim() !== '') {
