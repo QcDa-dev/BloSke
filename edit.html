@@ -131,7 +131,7 @@
             const ctx = canvas.getContext('2d');
             
             const PADDING_MAIN = 60;  
-            const PADDING_CROSS = 40; 
+            const PADDING_CROSS = 70; // ★修正: ヘッダー余白を増やして日付表示スペースを確保
             const ROW_SIZE = 60;      
             const GAP_2COL = 100; 
             const DELETE_BTN_SIZE = 20;
@@ -161,13 +161,13 @@
 
             let isDragging = false;
             let dragTargetBlock = null;
-            let dragStartPos = { x: 0, y: 0 }; // ドラッグ開始時のマウス座標
-            let dragCurrentPos = { x: 0, y: 0 }; // 現在のマウス座標
+            let dragStartPos = { x: 0, y: 0 }; 
+            let dragCurrentPos = { x: 0, y: 0 }; 
             let dragOriginalStartMs = 0;
             let dragOriginalEndMs = 0;
             let dragOriginalRow = 0; 
-            let dragOffset = 0; // マウスとブロック左端(上端)の差分
-            let dragCrossOffset = 0; // マウスとブロック上端(左端)の差分
+            let dragOffset = 0; 
+            let dragCrossOffset = 0; 
 
             const appIcon = new Image();
             appIcon.src = 'icon.svg';
@@ -285,7 +285,6 @@
                 return date.toTimeString().substring(0, 5);
             }
             
-            // ★★★ 日付フォーマット関数 ★★★
             function formatDate(date) {
                 return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
             }
@@ -440,12 +439,12 @@
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 15);
                             
-                            // ★★★ 日付跨ぎの表示 ★★★
+                            // ★修正: 0:00に日付表示 (位置調整: PADDING_CROSS増加分を活用)
                             const d = new Date(t);
                             if (d.getHours() === 0 && d.getMinutes() === 0) {
-                                targetCtx.font = FONT_S; // 少し小さくても良い
-                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 30);
-                                targetCtx.font = FONT_S; // 戻す
+                                targetCtx.font = FONT_S; 
+                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 35); // 上にずらす
+                                targetCtx.font = FONT_S; 
                             }
                         } else {
                             targetCtx.moveTo(rectStart.x - 10, rectStart.y);
@@ -453,7 +452,6 @@
                             targetCtx.textAlign = 'right';
                             targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 15, rectStart.y);
                             
-                            // ★★★ 日付跨ぎの表示 ★★★
                             const d = new Date(t);
                             if (d.getHours() === 0 && d.getMinutes() === 0) {
                                 targetCtx.font = FONT_S;
@@ -470,11 +468,6 @@
                     targetCtx.fillStyle = '#333';
                     targetCtx.font = FONT_L;
 
-                    // ★★★ 両端の日付表示判定 ★★★
-                    const dateStart = new Date(secStart);
-                    const dateEnd = new Date(secEnd);
-                    const isDifferentDate = dateStart.toDateString() !== dateEnd.toDateString();
-
                     [secStart, secEnd].forEach(t => {
                         const rectStart = getRect(t, t, layoutStartRow, section, isExport);
                         const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
@@ -487,24 +480,22 @@
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.fillText(formatTime(d), rectStart.x, rectStart.y - 25);
                             
-                            // 0:00 または 日付またぎの場合に日付を表示
-                            if ((d.getHours() === 0 && d.getMinutes() === 0) || isDifferentDate) {
-                                targetCtx.font = FONT_S;
-                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 40);
-                                targetCtx.font = FONT_L;
-                            }
+                            // ★修正: 両端には常に日付を表示 (被りなし位置へ)
+                            targetCtx.font = FONT_S;
+                            targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 40);
+                            targetCtx.font = FONT_L;
+                            
                         } else {
                             targetCtx.moveTo(rectStart.x - 20, rectStart.y);
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.textAlign = 'right';
                             targetCtx.fillText(formatTime(d), rectStart.x - 25, rectStart.y);
 
-                             // 0:00 または 日付またぎの場合に日付を表示
-                            if ((d.getHours() === 0 && d.getMinutes() === 0) || isDifferentDate) {
-                                targetCtx.font = FONT_S;
-                                targetCtx.fillText(formatDate(d), rectStart.x - 25, rectStart.y - 15);
-                                targetCtx.font = FONT_L;
-                            }
+                             // ★修正: 両端には常に日付を表示
+                            targetCtx.font = FONT_S;
+                            targetCtx.fillText(formatDate(d), rectStart.x - 25, rectStart.y - 15);
+                            targetCtx.font = FONT_L;
+
                             targetCtx.textAlign = 'center';
                         }
                         targetCtx.stroke();
@@ -622,20 +613,11 @@
                     const duration = bEnd - bStart;
                     const length = duration * pxPerMs;
                     
-                    // ★★★ 修正: マウス移動量(delta)を元の座標に加算する方式 ★★★
-                    // dragStartPos: ドラッグ開始時のマウス座標
-                    // dragCurrentPos: 現在のマウス座標
                     const deltaX = dragCurrentPos.x - dragStartPos.x;
                     const deltaY = dragCurrentPos.y - dragStartPos.y;
 
-                    // getRectで取得できるのは「元の時間」「元の行」に基づいた本来の座標
-                    // これにマウスの移動量(delta)を加えることで、掴んだ位置を維持して移動できる
-                    
-                    // 現在のブロックがどのセクションにあるか特定（便宜上 section 0 を基準）
-                    // ※2段組またぎの描画は複雑になるため、ドラッグ中は単一の矩形として表示
                     let originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
                     
-                    // マウス追従座標
                     let rect = {
                         x: originalRect.x + deltaX,
                         y: originalRect.y + deltaY,
@@ -742,9 +724,22 @@
                             isDragging = true;
                             dragTargetBlock = block;
                             
-                            // ★★★ 修正: マウス初期位置を保存 ★★★
-                            dragStartPos = { x: pos.x, y: pos.y };
-                            dragCurrentPos = { x: pos.x, y: pos.y };
+                            if (!isVertical) {
+                                dragStartX = pos.x;
+                                dragStartY = pos.y;
+                                dragOffset = 0; 
+                                dragCrossOffset = pos.y - h.y;
+                            } else {
+                                dragStartX = pos.x;
+                                dragStartY = pos.y;
+                                dragOffset = 0;
+                                dragCrossOffset = pos.x - h.x;
+                            }
+                            
+                            dragCurrentPos = { 
+                                x: pos.x - (isVertical ? dragCrossOffset : 0), 
+                                y: pos.y - (isVertical ? 0 : dragCrossOffset) 
+                            };
                             
                             dragOriginalStartMs = new Date(block.startISO).getTime();
                             dragOriginalEndMs = new Date(block.endISO).getTime();
@@ -816,27 +811,20 @@
                     let dropRow = 0;
                     let targetCoord = 0;
                     
-                    // ドロップした瞬間の描画上の「矩形位置」を推定し、そこから行を逆算
-                    // (マウス移動量 delta を元の矩形座標に加算)
                     const deltaX = dragCurrentPos.x - dragStartPos.x;
                     const deltaY = dragCurrentPos.y - dragStartPos.y;
-                    
-                    // 元の矩形（セクション0基準で計算）
                     const originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
                     const droppedRectY = originalRect.y + deltaY;
                     const droppedRectX = originalRect.x + deltaX;
 
                     if (!isVertical) {
-                        // 横表示: Y座標で行判定
                         let relY = droppedRectY - contentOffsetY;
-                        // 2段組下段判定
                         const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relY >= lowerStart) {
                             relY -= (lowerStart - PADDING_CROSS); 
                         }
                         targetCoord = relY;
                     } else {
-                        // 縦表示: X座標で行判定
                         let relX = droppedRectX - contentOffsetX;
                         const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relX >= rightStart) {
@@ -845,44 +833,34 @@
                         targetCoord = relX;
                     }
                     
-                    // PADDING_CROSS を引いて行番号算出
                     dropRow = Math.round((targetCoord - PADDING_CROSS) / ROW_SIZE);
                     if (dropRow < 0) dropRow = 0;
 
-                    // ★★★ 修正: スワップ処理（掴んでいるブロックを優先） ★★★
-                    
-                    // 1. 掴んでいるブロックの行を、まずドロップ先に確定させる
-                    dragTargetBlock.layoutRow = dropRow;
-
-                    // 2. ドロップ先の行にある、時間が重なる競合ブロックを探す
                     const targetStart = new Date(dragTargetBlock.startISO).getTime();
                     const targetEnd = new Date(dragTargetBlock.endISO).getTime();
 
+                    // スワップ処理（掴んでいるブロックを優先）
+                    let finalRow = dropRow;
+                    
                     const conflictingBlocks = projectBlocks.filter(b => {
                         if (b === dragTargetBlock) return false;
                         if (b.layoutRow !== dropRow) return false;
                         const bStart = new Date(b.startISO).getTime();
                         const bEnd = new Date(b.endISO).getTime();
-                        // 時間重複判定
                         return targetStart < bEnd && targetEnd > bStart;
                     });
 
-                    // 3. 競合ブロックがあれば、それらを再帰的に空き行へ移動させる
                     if (conflictingBlocks.length > 0) {
-                        // 競合ブロックを一旦リストに集める
+                        finalRow = dropRow;
                         let blocksToMove = [...conflictingBlocks];
                         
-                        // 移動させるブロックを1つずつ処理
                         while (blocksToMove.length > 0) {
                             const movingBlock = blocksToMove.shift();
-                            
-                            // 移動先候補行を探索（まずは直下の行から）
                             let newRow = movingBlock.layoutRow + 1;
                             while (true) {
-                                // この行で、自分以外のブロックと重なるか？
                                 const conflictInNewRow = projectBlocks.some(b => {
-                                    if (b === movingBlock) return false; // 自分自身
-                                    if (blocksToMove.includes(b)) return false; // 今から移動予定のブロックは無視してOK（どうせ動くから）
+                                    if (b === movingBlock) return false; 
+                                    if (blocksToMove.includes(b)) return false;
                                     if (b.layoutRow !== newRow) return false;
                                     
                                     const mStart = new Date(movingBlock.startISO).getTime();
@@ -893,21 +871,20 @@
                                 });
 
                                 if (!conflictInNewRow) {
-                                    // 空きが見つかったので移動確定
                                     movingBlock.layoutRow = newRow;
                                     break;
                                 } else {
-                                    // 重なる相手がいる場合
-                                    // その相手も移動対象リストに追加して、自分はこの行を奪い取る（玉突き）
-                                    // ...というロジックも可能だが、無限ループのリスクがあるため、
-                                    // シンプルに「空いている行が見つかるまで下にずらす」方式を採用する
                                     newRow++;
                                 }
                             }
                         }
+                    } else {
+                        finalRow = dropRow;
                     }
 
+                    dragTargetBlock.layoutRow = finalRow;
                     dragTargetBlock = null;
+
                     saveToLocalStorage(); 
                     drawCanvas();
                 }
