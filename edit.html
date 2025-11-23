@@ -161,14 +161,11 @@
 
             let isDragging = false;
             let dragTargetBlock = null;
-            let dragStartX = 0; 
-            let dragStartY = 0; 
+            let dragStartPos = { x: 0, y: 0 }; // ドラッグ開始時のマウス座標
+            let dragCurrentPos = { x: 0, y: 0 }; // 現在のマウス座標
             let dragOriginalStartMs = 0;
             let dragOriginalEndMs = 0;
             let dragOriginalRow = 0; 
-            let dragOffset = 0; 
-            let dragCrossOffset = 0; 
-            let dragCurrentPos = { x: 0, y: 0 };
 
             const appIcon = new Image();
             appIcon.src = 'icon.svg';
@@ -479,6 +476,7 @@
                         const drawStart = Math.max(bStart, secStart);
                         const drawEnd = Math.min(bEnd, secEnd);
 
+                        // 通常の描画座標を取得
                         let rect = getRect(drawStart, drawEnd, block.layoutRow, section, isExport);
 
                         if (isDragRender) return; 
@@ -576,19 +574,31 @@
                 } 
 
                 if (isDragging && dragTargetBlock) {
+                    // ドラッグ中のブロックを描画（マウス追従）
                     const bStart = new Date(dragTargetBlock.startISO).getTime();
                     const bEnd = new Date(dragTargetBlock.endISO).getTime();
                     const duration = bEnd - bStart;
                     const length = duration * pxPerMs;
                     
-                    // リアルタイム時間表示のため、描画時に時間情報を参照
-                    // ここでの bStart, bEnd は handleInputMove で更新された最新のもの
+                    // ★★★ 修正: マウス移動量(delta)を元の座標に加算する方式 ★★★
+                    // dragStartPos: ドラッグ開始時のマウス座標
+                    // dragCurrentPos: 現在のマウス座標
+                    const deltaX = dragCurrentPos.x - dragStartPos.x;
+                    const deltaY = dragCurrentPos.y - dragStartPos.y;
+
+                    // getRectで取得できるのは「元の時間」「元の行」に基づいた本来の座標
+                    // これにマウスの移動量(delta)を加えることで、掴んだ位置を維持して移動できる
                     
-                    let rect = { 
-                        x: dragCurrentPos.x, 
-                        y: dragCurrentPos.y, 
-                        w: (!isVertical) ? length : ROW_SIZE * 0.8, 
-                        h: (!isVertical) ? ROW_SIZE * 0.8 : length 
+                    // 現在のブロックがどのセクションにあるか特定（便宜上 section 0 を基準）
+                    // ※2段組またぎの描画は複雑になるため、ドラッグ中は単一の矩形として表示
+                    let originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
+                    
+                    // マウス追従座標
+                    let rect = {
+                        x: originalRect.x + deltaX,
+                        y: originalRect.y + deltaY,
+                        w: (!isVertical) ? length : ROW_SIZE * 0.8,
+                        h: (!isVertical) ? ROW_SIZE * 0.8 : length
                     };
 
                     targetCtx.globalAlpha = 0.7;
@@ -603,7 +613,6 @@
                     targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
                     targetCtx.clip();
                     
-                    // ドラッグ中も時間を表示する
                     if (!isVertical) {
                         targetCtx.textAlign = 'left';
                         targetCtx.fillText(dragTargetBlock.name, rect.x + 8, rect.y + 20);
@@ -615,20 +624,12 @@
                         targetCtx.textAlign = 'center';
                         targetCtx.textBaseline = 'top';
                         targetCtx.fillText(dragTargetBlock.name, rect.x + rect.w/2, rect.y + 5);
-                        
-                        // 縦表示時は外側に時間を表示
-                        // ただしクリップされているので外には描けないため、クリップ前に描画するか、
-                        // クリップ範囲を広げる必要があるが、ここではクリップ内で簡易表示にとどめるか、
-                        // あるいはドラッグ中専用のポップアップを出すのが見やすい
-                        
-                        // 簡易的に内部に表示
                         targetCtx.font = FONT_S;
                         targetCtx.fillText(formatTime(new Date(bStart)) + ' - ' + formatTime(new Date(bEnd)), rect.x + rect.w/2, rect.y + 25);
                         targetCtx.textBaseline = 'alphabetic';
                     }
                     targetCtx.restore();
                     
-                    // 縦表示のドラッグ中時間表示 (外側)
                     if(isVertical) {
                         targetCtx.font = FONT_S;
                         targetCtx.fillStyle = '#333';
@@ -699,22 +700,9 @@
                             isDragging = true;
                             dragTargetBlock = block;
                             
-                            if (!isVertical) {
-                                dragStartX = pos.x;
-                                dragStartY = pos.y;
-                                dragOffset = 0; 
-                                dragCrossOffset = pos.y - h.y;
-                            } else {
-                                dragStartX = pos.x;
-                                dragStartY = pos.y;
-                                dragOffset = 0;
-                                dragCrossOffset = pos.x - h.x;
-                            }
-                            
-                            dragCurrentPos = { 
-                                x: pos.x - (isVertical ? dragCrossOffset : 0), 
-                                y: pos.y - (isVertical ? 0 : dragCrossOffset) 
-                            };
+                            // ★★★ 修正: マウス初期位置を保存 ★★★
+                            dragStartPos = { x: pos.x, y: pos.y };
+                            dragCurrentPos = { x: pos.x, y: pos.y };
                             
                             dragOriginalStartMs = new Date(block.startISO).getTime();
                             dragOriginalEndMs = new Date(block.endISO).getTime();
@@ -758,18 +746,16 @@
                 if (!isDragging || !dragTargetBlock) return;
                 e.preventDefault(); 
                 const pos = getCanvasCoordinates(e);
+                dragCurrentPos = { x: pos.x, y: pos.y }; // 現在位置を更新
                 
                 let deltaMs = 0;
+                // 時間軸方向のマウス移動量から時間差分を計算
                 if (!isVertical) {
-                    const deltaPixel = pos.x - dragStartX;
+                    const deltaPixel = pos.x - dragStartPos.x;
                     deltaMs = deltaPixel / pxPerMs;
-                    dragCurrentPos.x = pos.x; 
-                    dragCurrentPos.y = pos.y - dragCrossOffset; 
                 } else {
-                    const deltaPixel = pos.y - dragStartY;
+                    const deltaPixel = pos.y - dragStartPos.y;
                     deltaMs = deltaPixel / pxPerMs;
-                    dragCurrentPos.y = pos.y;
-                    dragCurrentPos.x = pos.x - dragCrossOffset;
                 }
 
                 const newStartMs = dragOriginalStartMs + deltaMs;
@@ -788,15 +774,28 @@
                     let dropRow = 0;
                     let targetCoord = 0;
                     
+                    // ドロップした瞬間の描画上の「矩形位置」を推定し、そこから行を逆算
+                    // (マウス移動量 delta を元の矩形座標に加算)
+                    const deltaX = dragCurrentPos.x - dragStartPos.x;
+                    const deltaY = dragCurrentPos.y - dragStartPos.y;
+                    
+                    // 元の矩形（セクション0基準で計算）
+                    const originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
+                    const droppedRectY = originalRect.y + deltaY;
+                    const droppedRectX = originalRect.x + deltaX;
+
                     if (!isVertical) {
-                        let relY = dragCurrentPos.y - contentOffsetY;
+                        // 横表示: Y座標で行判定
+                        let relY = droppedRectY - contentOffsetY;
+                        // 2段組下段判定
                         const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relY >= lowerStart) {
                             relY -= (lowerStart - PADDING_CROSS); 
                         }
                         targetCoord = relY;
                     } else {
-                        let relX = dragCurrentPos.x - contentOffsetX;
+                        // 縦表示: X座標で行判定
+                        let relX = droppedRectX - contentOffsetX;
                         const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
                         if (isTwoColumn && relX >= rightStart) {
                             relX -= (rightStart - PADDING_CROSS);
@@ -804,16 +803,18 @@
                         targetCoord = relX;
                     }
                     
+                    // PADDING_CROSS を引いて行番号算出
+                    // (元のロジックではドラッグ開始時のオフセットdragCrossOffsetなども考慮していたが、
+                    // 今回は「矩形そのものの移動先」で判定するためシンプル)
                     dropRow = Math.round((targetCoord - PADDING_CROSS) / ROW_SIZE);
                     if (dropRow < 0) dropRow = 0;
 
                     const targetStart = new Date(dragTargetBlock.startISO).getTime();
                     const targetEnd = new Date(dragTargetBlock.endISO).getTime();
 
-                    // スワップ処理（修正版: 掴んでいるブロックを優先）
+                    // スワップ処理
                     let finalRow = dropRow;
                     
-                    // 1. まず、ドロップ先の行にある競合ブロックを探す
                     const conflictingBlocks = projectBlocks.filter(b => {
                         if (b === dragTargetBlock) return false;
                         if (b.layoutRow !== dropRow) return false;
@@ -823,19 +824,13 @@
                     });
 
                     if (conflictingBlocks.length > 0) {
-                        // 2. 競合がある場合、掴んでいるブロックをその行（dropRow）に確定する
                         finalRow = dropRow;
-
-                        // 3. 競合ブロック（元々あったブロック）を押し出す
-                        //    空き行が見つかるまで下へ移動させる再帰的処理
                         conflictingBlocks.forEach(conflict => {
                             let newRowForConflict = dropRow + 1;
                             while (true) {
-                                // 移動先候補の行 (newRowForConflict) にさらに競合がないか確認
                                 const secondaryConflict = projectBlocks.some(b => {
-                                    if (b === conflict || b === dragTargetBlock) return false; // 自分自身とドラッグ中のブロックは除外
+                                    if (b === conflict || b === dragTargetBlock) return false;
                                     if (b.layoutRow !== newRowForConflict) return false;
-                                    
                                     const cStart = new Date(conflict.startISO).getTime();
                                     const cEnd = new Date(conflict.endISO).getTime();
                                     const bStart = new Date(b.startISO).getTime();
@@ -845,13 +840,12 @@
 
                                 if (!secondaryConflict) {
                                     conflict.layoutRow = newRowForConflict;
-                                    break; // 空き行が見つかったので確定
+                                    break; 
                                 }
-                                newRowForConflict++; // 次の行へ
+                                newRowForConflict++; 
                             }
                         });
                     } else {
-                        // 競合がない場合はそのまま配置
                         finalRow = dropRow;
                     }
 
