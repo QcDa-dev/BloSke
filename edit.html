@@ -284,6 +284,11 @@
             function formatTime(date) {
                 return date.toTimeString().substring(0, 5);
             }
+            
+            // ★★★ 日付フォーマット関数 ★★★
+            function formatDate(date) {
+                return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+            }
 
             function getRect(timeStart, timeEnd, row, section, isExport) {
                 const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
@@ -434,11 +439,27 @@
                             targetCtx.moveTo(rectStart.x, rectStart.y - 10); 
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 15);
+                            
+                            // ★★★ 日付跨ぎの表示 ★★★
+                            const d = new Date(t);
+                            if (d.getHours() === 0 && d.getMinutes() === 0) {
+                                targetCtx.font = FONT_S; // 少し小さくても良い
+                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 30);
+                                targetCtx.font = FONT_S; // 戻す
+                            }
                         } else {
                             targetCtx.moveTo(rectStart.x - 10, rectStart.y);
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.textAlign = 'right';
                             targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 15, rectStart.y);
+                            
+                            // ★★★ 日付跨ぎの表示 ★★★
+                            const d = new Date(t);
+                            if (d.getHours() === 0 && d.getMinutes() === 0) {
+                                targetCtx.font = FONT_S;
+                                targetCtx.fillText(formatDate(d), rectStart.x - 15, rectStart.y - 15);
+                                targetCtx.font = FONT_S;
+                            }
                             targetCtx.textAlign = 'center';
                         }
                         targetCtx.stroke();
@@ -449,20 +470,41 @@
                     targetCtx.fillStyle = '#333';
                     targetCtx.font = FONT_L;
 
+                    // ★★★ 両端の日付表示判定 ★★★
+                    const dateStart = new Date(secStart);
+                    const dateEnd = new Date(secEnd);
+                    const isDifferentDate = dateStart.toDateString() !== dateEnd.toDateString();
+
                     [secStart, secEnd].forEach(t => {
                         const rectStart = getRect(t, t, layoutStartRow, section, isExport);
                         const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
                         
                         targetCtx.beginPath();
+                        const d = new Date(t);
+
                         if (!isVertical) {
                             targetCtx.moveTo(rectStart.x, rectStart.y - 20);
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
-                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 25);
+                            targetCtx.fillText(formatTime(d), rectStart.x, rectStart.y - 25);
+                            
+                            // 0:00 または 日付またぎの場合に日付を表示
+                            if ((d.getHours() === 0 && d.getMinutes() === 0) || isDifferentDate) {
+                                targetCtx.font = FONT_S;
+                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 40);
+                                targetCtx.font = FONT_L;
+                            }
                         } else {
                             targetCtx.moveTo(rectStart.x - 20, rectStart.y);
                             targetCtx.lineTo(rectEnd.x, rectEnd.y);
                             targetCtx.textAlign = 'right';
-                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 25, rectStart.y);
+                            targetCtx.fillText(formatTime(d), rectStart.x - 25, rectStart.y);
+
+                             // 0:00 または 日付またぎの場合に日付を表示
+                            if ((d.getHours() === 0 && d.getMinutes() === 0) || isDifferentDate) {
+                                targetCtx.font = FONT_S;
+                                targetCtx.fillText(formatDate(d), rectStart.x - 25, rectStart.y - 15);
+                                targetCtx.font = FONT_L;
+                            }
                             targetCtx.textAlign = 'center';
                         }
                         targetCtx.stroke();
