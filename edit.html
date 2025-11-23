@@ -166,6 +166,8 @@
             let dragOriginalStartMs = 0;
             let dragOriginalEndMs = 0;
             let dragOriginalRow = 0; 
+            let dragOffset = 0; // マウスとブロック左端(上端)の差分
+            let dragCrossOffset = 0; // マウスとブロック上端(左端)の差分
 
             const appIcon = new Image();
             appIcon.src = 'icon.svg';
@@ -476,7 +478,6 @@
                         const drawStart = Math.max(bStart, secStart);
                         const drawEnd = Math.min(bEnd, secEnd);
 
-                        // 通常の描画座標を取得
                         let rect = getRect(drawStart, drawEnd, block.layoutRow, section, isExport);
 
                         if (isDragRender) return; 
@@ -574,7 +575,6 @@
                 } 
 
                 if (isDragging && dragTargetBlock) {
-                    // ドラッグ中のブロックを描画（マウス追従）
                     const bStart = new Date(dragTargetBlock.startISO).getTime();
                     const bEnd = new Date(dragTargetBlock.endISO).getTime();
                     const duration = bEnd - bStart;
@@ -804,54 +804,68 @@
                     }
                     
                     // PADDING_CROSS を引いて行番号算出
-                    // (元のロジックではドラッグ開始時のオフセットdragCrossOffsetなども考慮していたが、
-                    // 今回は「矩形そのものの移動先」で判定するためシンプル)
                     dropRow = Math.round((targetCoord - PADDING_CROSS) / ROW_SIZE);
                     if (dropRow < 0) dropRow = 0;
 
+                    // ★★★ 修正: スワップ処理（掴んでいるブロックを優先） ★★★
+                    
+                    // 1. 掴んでいるブロックの行を、まずドロップ先に確定させる
+                    dragTargetBlock.layoutRow = dropRow;
+
+                    // 2. ドロップ先の行にある、時間が重なる競合ブロックを探す
                     const targetStart = new Date(dragTargetBlock.startISO).getTime();
                     const targetEnd = new Date(dragTargetBlock.endISO).getTime();
 
-                    // スワップ処理
-                    let finalRow = dropRow;
-                    
                     const conflictingBlocks = projectBlocks.filter(b => {
                         if (b === dragTargetBlock) return false;
                         if (b.layoutRow !== dropRow) return false;
                         const bStart = new Date(b.startISO).getTime();
                         const bEnd = new Date(b.endISO).getTime();
+                        // 時間重複判定
                         return targetStart < bEnd && targetEnd > bStart;
                     });
 
+                    // 3. 競合ブロックがあれば、それらを再帰的に空き行へ移動させる
                     if (conflictingBlocks.length > 0) {
-                        finalRow = dropRow;
-                        conflictingBlocks.forEach(conflict => {
-                            let newRowForConflict = dropRow + 1;
+                        // 競合ブロックを一旦リストに集める
+                        let blocksToMove = [...conflictingBlocks];
+                        
+                        // 移動させるブロックを1つずつ処理
+                        while (blocksToMove.length > 0) {
+                            const movingBlock = blocksToMove.shift();
+                            
+                            // 移動先候補行を探索（まずは直下の行から）
+                            let newRow = movingBlock.layoutRow + 1;
                             while (true) {
-                                const secondaryConflict = projectBlocks.some(b => {
-                                    if (b === conflict || b === dragTargetBlock) return false;
-                                    if (b.layoutRow !== newRowForConflict) return false;
-                                    const cStart = new Date(conflict.startISO).getTime();
-                                    const cEnd = new Date(conflict.endISO).getTime();
+                                // この行で、自分以外のブロックと重なるか？
+                                const conflictInNewRow = projectBlocks.some(b => {
+                                    if (b === movingBlock) return false; // 自分自身
+                                    if (blocksToMove.includes(b)) return false; // 今から移動予定のブロックは無視してOK（どうせ動くから）
+                                    if (b.layoutRow !== newRow) return false;
+                                    
+                                    const mStart = new Date(movingBlock.startISO).getTime();
+                                    const mEnd = new Date(movingBlock.endISO).getTime();
                                     const bStart = new Date(b.startISO).getTime();
                                     const bEnd = new Date(b.endISO).getTime();
-                                    return cStart < bEnd && cEnd > bStart;
+                                    return mStart < bEnd && mEnd > bStart;
                                 });
 
-                                if (!secondaryConflict) {
-                                    conflict.layoutRow = newRowForConflict;
-                                    break; 
+                                if (!conflictInNewRow) {
+                                    // 空きが見つかったので移動確定
+                                    movingBlock.layoutRow = newRow;
+                                    break;
+                                } else {
+                                    // 重なる相手がいる場合
+                                    // その相手も移動対象リストに追加して、自分はこの行を奪い取る（玉突き）
+                                    // ...というロジックも可能だが、無限ループのリスクがあるため、
+                                    // シンプルに「空いている行が見つかるまで下にずらす」方式を採用する
+                                    newRow++;
                                 }
-                                newRowForConflict++; 
                             }
-                        });
-                    } else {
-                        finalRow = dropRow;
+                        }
                     }
 
-                    dragTargetBlock.layoutRow = finalRow;
                     dragTargetBlock = null;
-
                     saveToLocalStorage(); 
                     drawCanvas();
                 }
