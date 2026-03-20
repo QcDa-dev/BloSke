@@ -4,137 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>新規登録 - BloSke</title>
-    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    
-    <link rel="stylesheet" href="auth.css">
-    <!-- Font Awesome (Googleアイコン用) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="common.css">
 </head>
-<body>
-    
-    <div class="auth-container">
-        <h1 class="auth-title">新規ユーザー登録</h1>
+<body class="pt-16 pb-16 bg-gray-50 flex items-center justify-center min-h-screen">
+
+    <div class="bg-white p-8 md:p-10 rounded-2xl shadow-xl border border-gray-100 w-full max-w-md mx-4">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-blue-600 mb-2">新規ユーザー登録</h1>
+            <p class="text-gray-500 text-sm">BloSkeでタイムテーブルを保存しよう</p>
+        </div>
         
-        <form id="register-form">
-            <p style="text-align: center; font-size: 1.1rem; font-weight: 500; margin-bottom: 20px;">オリジナルIDでの登録</p>
-            <div class="form-group">
-                <label for="username">ユーザー名</label>
-                <input type="text" id="username" class="form-input" required>
+        <form id="register-form" class="space-y-5">
+            <div>
+                <label for="username" class="block text-sm font-semibold text-gray-700 mb-1">ユーザー名 (表示名)</label>
+                <input type="text" id="username" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" required>
             </div>
-            <div class="form-group">
-                <label for="password">パスワード</label>
-                <input type="password" id="password" class="form-input" required>
+            <div>
+                <label for="email" class="block text-sm font-semibold text-gray-700 mb-1">メールアドレス</label>
+                <input type="email" id="email" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" required>
             </div>
-            <div class="form-group">
-                <label for="email">メールアドレス</label>
-                <input type="email" id="email" class="form-input" required>
+            <div>
+                <label for="password" class="block text-sm font-semibold text-gray-700 mb-1">パスワード (6文字以上)</label>
+                <input type="password" id="password" minlength="6" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" required>
             </div>
             
-            <button type="submit" id="register-btn" class="btn btn-primary" style="margin-top: 10px;">
-                <i class="fa-solid fa-user-plus"></i> 登録
+            <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors flex justify-center items-center gap-2 mt-4">
+                <i class="fa-solid fa-user-plus"></i> 登録する
             </button>
             
-            <div class="auth-divider">または</div>
+            <div class="relative flex py-4 items-center">
+                <div class="flex-grow border-t border-gray-300"></div>
+                <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">または</span>
+                <div class="flex-grow border-t border-gray-300"></div>
+            </div>
             
-            <button type="button" id="google-register-btn" class="btn btn-google">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon">
+            <button type="button" id="google-register-btn" class="w-full py-3 bg-white hover:bg-gray-50 text-gray-700 font-semibold rounded-lg border border-gray-300 shadow-sm transition-colors flex justify-center items-center gap-3">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" class="w-5 h-5">
                 Googleアカウントで登録
             </button>
         </form>
         
-        <div class="auth-links">
-            <a href="login.html">すでにアカウントをお持ちの方はこちら (ログイン)</a>
+        <div class="mt-8 text-center">
+            <a href="login.html" class="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline">すでにアカウントをお持ちの方はこちら (ログイン)</a>
         </div>
     </div>
     
-    <!-- Firebase SDK (互換性バージョン) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    
-    <!-- 共通スクリプト (API連携) -->
-    <script src="common.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+    <script type="module">
+        import { initCommonUI, showLoading, hideLoading, auth, createUserWithEmailAndPassword, updateProfile, googleProvider, signInWithPopup } from './common.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCommonUI('BloSke');
+
             const registerForm = document.getElementById('register-form');
             const googleRegisterBtn = document.getElementById('google-register-btn');
 
-            // ★★★ 修正 (問題3): Googleリダイレクト認証の結果を処理 ★★★
-             if (firebaseAuth) {
-                try {
-                    // ページ読み込み時にリダイレクト結果をチェック
-                    const result = await firebaseAuth.getRedirectResult();
-                    if (result && result.user) {
-                        // Google認証から戻ってきた場合
-                        const user = result.user;
-                        console.log('Google Redirect Result:', user); // デバッグ用
-                        
-                        // Firebase認証成功後、GAS APIでDB（Sheets）に登録
-                        const data = await callGasApi('registerUser', {
-                            authType: 'google',
-                            email: user.email,
-                            accountName: user.displayName || user.email // アカウント名
-                        });
-                        
-                        alert(data.message || '登録が完了しました。ログイン画面に移動します。');
-                        window.location.href = 'login.html';
-                        return; // 処理完了
-                    }
-                    // result が null の場合は、リダイレクトからの戻りではない（＝通常のページ訪問）
-
-                } catch (error) {
-                    if (error.code !== 'auth/web-storage-unsupported' && error.code !== 'auth/internal-error') { 
-                        console.error('Googleリダイレクト処理失敗:', error);
-                        // callGasApi のエラーは callGasApi 内部で alert される
-                        if (!error.message.includes('HTTPエラー')) {
-                           alert(`Google認証に失敗しました: ${error.message}`);
-                        }
-                    }
-                }
-            }
-            // ★★★ 修正ここまで ★★★
-
-
-            // オリジナルIDでの登録 (仕様書 4.1)
+            // Email/Password 登録
             registerForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const username = document.getElementById('username').value;
+                const username = document.getElementById('username').value.trim();
+                const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
-                const email = document.getElementById('email').value;
 
+                showLoading();
                 try {
-                    const data = await callGasApi('registerUser', {
-                        authType: 'original',
-                        username: username,
-                        password: password,
-                        email: email
-                    });
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    // 表示名を設定
+                    await updateProfile(userCredential.user, { displayName: username });
                     
-                    alert(data.message || '登録が完了しました。ログイン画面に移動します。');
-                    window.location.href = 'login.html';
-
+                    alert('登録が完了しました。');
+                    window.location.href = 'projects.html';
                 } catch (error) {
-                    console.error('オリジナル登録失敗:', error);
+                    console.error('Register Error:', error);
+                    let msg = '登録に失敗しました。';
+                    if (error.code === 'auth/email-already-in-use') msg = 'このメールアドレスは既に使用されています。';
+                    else if (error.code === 'auth/weak-password') msg = 'パスワードは6文字以上にしてください。';
+                    alert(msg);
+                } finally {
+                    hideLoading();
                 }
             });
 
-            // ★★★ 修正 (問題3): Googleでの登録 (PopupからRedirectに変更) ★★★
+            // Google 登録 (ログインと同じ処理でアカウントが作成される)
             googleRegisterBtn.addEventListener('click', async () => {
-                if (!firebaseAuth || !googleProvider) {
-                    alert('Google認証の初期化に失敗しました。');
-                    return;
-                }
-                
+                showLoading();
                 try {
-                    // Popupの代わりにRedirectを開始
-                    await firebaseAuth.signInWithRedirect(googleProvider);
-                    // この後、Googleの認証画面に遷移し、認証後にこのページに戻ってくる
-
+                    await signInWithPopup(auth, googleProvider);
+                    window.location.href = 'projects.html';
                 } catch (error) {
-                     console.error('Googleリダイレクト開始失敗:', error);
-                     alert(`Google認証の開始に失敗しました: ${error.message}`);
+                    console.error('Google Register Error:', error);
+                    alert(`Google認証に失敗しました: ${error.message}`);
+                } finally {
+                    hideLoading();
                 }
             });
         });
