@@ -4,142 +4,98 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BloSke - タイムテーブル作成アプリ</title>
-
-    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-    <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
-    
-    <!-- Firebase SDK (common.js より先に読み込む) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-
-    <!-- ★★★ 修正 (問題4): 以前のスタイルに戻す ★★★ -->
-    <style>
-        /* index.html 専用のウェルカムスタイル */
-        .welcome-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 40px 20px;
-            height: calc(100vh - var(--header-height) - var(--footer-height)); /* ヘッダー/フッターを除く全高 */
-            box-sizing: border-box;
-        }
-        .welcome-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--main-color);
-            margin-bottom: 15px;
-        }
-        .welcome-subtitle {
-            font-size: 1.1rem;
-            color: #555;
-            margin-bottom: 40px;
-            max-width: 500px;
-        }
-        .action-buttons {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            width: 100%;
-        }
-        .action-buttons .btn {
-            width: 80%;
-            max-width: 300px;
-            padding: 15px;
-            font-size: 1.1rem;
-        }
-    </style>
 </head>
-<body>
+<body class="pt-16 pb-16 bg-gray-50 flex flex-col min-h-screen">
 
-    <main>
-        <!-- ★★★ 修正 (問題4): 以前のレイアウトに戻す ★★★ -->
-        <div class="welcome-container">
-            <h1 class="welcome-title">BloSkeへようこそ</h1>
-            <p class="welcome-subtitle">
-                直感的な操作で、イベント、会議、個人の学習計画など、
+    <main class="flex-grow flex flex-col items-center justify-center p-6 text-center">
+        <div class="max-w-2xl bg-white p-10 rounded-2xl shadow-xl border border-gray-100">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-blue-600 mb-6 tracking-tight">BloSkeへようこそ</h1>
+            <p class="text-lg text-gray-600 mb-10 leading-relaxed">
+                直感的な操作で、イベント、会議、個人の学習計画など、<br class="hidden md:block">
                 あらゆるタイムテーブルを簡単に作成・共有できます。
             </p>
             
-            <div class="action-buttons">
-                <button id="new-project-btn" class="btn btn-primary">
+            <div class="flex flex-col md:flex-row items-center justify-center gap-4 w-full">
+                <button id="new-project-btn" class="w-full md:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-md transition-transform transform hover:-translate-y-1 flex items-center justify-center gap-2">
                     <i class="fa-solid fa-plus"></i> 新規作成
                 </button>
-                <button id="load-project-btn" class="btn btn-secondary">
-                    <i class="fa-solid fa-folder-open"></i> 保存済みプロジェクト
+                <button id="load-project-btn" class="w-full md:w-auto px-8 py-4 bg-white hover:bg-gray-50 text-gray-800 text-lg font-bold rounded-xl shadow-md border border-gray-200 transition-transform transform hover:-translate-y-1 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-folder-open text-blue-500"></i> 保存済みプロジェクト
                 </button>
             </div>
         </div>
     </main>
 
-    <!-- 新規作成モーダル (仕様書 3.2.1) -->
-    <div id="new-project-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2 class="modal-title">新規プロジェクト作成</h2>
+    <!-- 新規作成モーダル -->
+    <div id="new-project-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-95 opacity-0" id="new-project-modal-content">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">新規プロジェクト作成</h2>
             <form id="new-project-form">
-                <div class="form-group">
-                    <label for="project-name-input">プロジェクト名</label>
-                    <input type="text" id="project-name-input" class="form-input" required>
+                <div class="mb-6">
+                    <label for="project-name-input" class="block text-gray-700 text-sm font-bold mb-2">プロジェクト名</label>
+                    <input type="text" id="project-name-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow" required>
                 </div>
-                <div class="modal-actions">
-                    <button type="button" id="cancel-new-project-btn" class="btn btn-secondary">キャンセル</button>
-                    <button type="submit" class="btn btn-primary">決定</button>
+                <div class="flex justify-end gap-3">
+                    <button type="button" id="cancel-new-project-btn" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-colors">キャンセル</button>
+                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors">決定</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 共通スクリプト -->
-    <script src="common.js"></script>
-    <script>
+    <script type="module">
+        import { initCommonUI } from './common.js';
+
         document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIを初期化
             initCommonUI('BloSke');
 
-            // --- ローカル保存データチェック (仕様書 3.2.1) ---
-            const localData = localStorage.getItem('bloske_local_project');
-            if (localData) {
-                if (confirm('編集中のプロジェクトデータが見つかりました。復元しますか？')) {
-                    // edit.html に遷移し、ローカルデータを読み込む
-                    window.location.href = 'edit.html?restore=true';
-                    return;
-                } else {
-                    // 復元しない場合はローカルデータを削除
-                    localStorage.removeItem('bloske_local_project');
-                }
-            }
-            
-            // --- モーダル設定 ---
-            setupModalClose('new-project-modal', '#cancel-new-project-btn');
-            
-            // --- イベントリスナー ---
-            // [新規作成] ボタン
-            document.getElementById('new-project-btn').addEventListener('click', () => {
-                // デフォルトのプロジェクト名を設定 (仕様書 3.2.1)
-                const defaultName = `my project ${Math.floor(Math.random() * 100)}`;
-                document.getElementById('project-name-input').value = defaultName;
-                showModal('new-project-modal');
+            const modal = document.getElementById('new-project-modal');
+            const modalContent = document.getElementById('new-project-modal-content');
+            const cancelBtn = document.getElementById('cancel-new-project-btn');
+            const newBtn = document.getElementById('new-project-btn');
+            const loadBtn = document.getElementById('load-project-btn');
+            const form = document.getElementById('new-project-form');
+            const input = document.getElementById('project-name-input');
+
+            const openModal = () => {
+                input.value = 'my project'; // 仕様変更: 数字を付けない
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modalContent.classList.remove('scale-95', 'opacity-0');
+                    modalContent.classList.add('scale-100', 'opacity-100');
+                    input.focus();
+                }, 10);
+            };
+
+            const closeModal = () => {
+                modalContent.classList.remove('scale-100', 'opacity-100');
+                modalContent.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 200);
+            };
+
+            newBtn.addEventListener('click', openModal);
+            cancelBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
             });
 
-            // [保存済みプロジェクト] ボタン (仕様書 3.2.1)
-            document.getElementById('load-project-btn').addEventListener('click', () => {
-                window.location.href = 'login.html'; // ログイン画面へ
+            loadBtn.addEventListener('click', () => {
+                window.location.href = 'projects.html';
             });
 
-            // モーダル内 [決定] ボタン
-            document.getElementById('new-project-form').addEventListener('submit', (e) => {
+            form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const projectName = document.getElementById('project-name-input').value.trim();
+                const projectName = input.value.trim();
                 if (projectName) {
-                    // プロジェクト名をセッションストレージに保存して編集画面へ遷移
                     sessionStorage.setItem('bloske_current_project_name', projectName);
+                    // 既存のセッションデータをクリア（新規のため）
+                    sessionStorage.removeItem('bloske_project_id'); 
                     window.location.href = 'edit.html';
                 }
             });
