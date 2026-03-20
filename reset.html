@@ -3,170 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ID/パスワードの更新 - BloSke</title>
-    <!-- アイコン設定 -->
+    <title>パスワード再設定完了 - BloSke</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    
-    <link rel="stylesheet" href="auth.css">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="common.css">
 </head>
-<body>
+<body class="pt-16 pb-16 bg-gray-50 flex items-center justify-center min-h-screen">
     
-    <div class="auth-container">
-        <h1 class="auth-title">ID/パスワードの更新</h1>
-        
-        <!-- フォームはJSによって動的に切り替え -->
-        <div id="reset-forms-container">
-            <!-- mode = 'id_reset' 用フォーム -->
-            <form id="id-reset-form" class="reset-form hidden">
-                <p class="form-note">新しいIDを設定してください。</p>
-                <div class="form-group">
-                    <label for="current-password-id">現在のパスワード</label>
-                    <input type="password" id="current-password-id" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label for="new-id-id">新しいID (ユーザー名)</label>
-                    <input type="text" id="new-id-id" class="form-input" required>
-                </div>
-            </form>
-
-            <!-- mode = 'password_reset' 用フォーム -->
-            <form id="password-reset-form" class="reset-form hidden">
-                <p class="form-note">新しいパスワードを設定してください。</p>
-                <div class="form-group">
-                    <label for="current-id-pw">現在のID (ユーザー名)</label>
-                    <input type="text" id="current-id-pw" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label for="new-password-pw">新しいパスワード</label>
-                    <input type="password" id="new-password-pw" class="form-input" required>
-                </div>
-            </form>
-            
-            <!-- mode = 'id_password_reset' 用フォーム -->
-            <form id="id-password-reset-form" class="reset-form hidden">
-                <p class="form-note">新しいIDとパスワードを設定してください。</p>
-                <div class="form-group">
-                    <label for="new-id-all">新しいID (ユーザー名)</label>
-                    <input type="text" id="new-id-all" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label for="new-password-all">新しいパスワード</label>
-                    <input type="password" id="new-password-all" class="form-input" required>
-                </div>
-            </form>
-
-            <div id="loading-message" class="text-center">
-                <p><i class="fa-solid fa-spinner fa-spin"></i> 情報を読み込んでいます...</p>
-            </div>
-
-            <div id="error-message" class="text-center hidden" style="color: red;">
-                <p>無効なリンクです。再設定メールをもう一度送信してください。</p>
-            </div>
-
-            <button type="submit" id="update-credential-btn" class="btn btn-primary hidden" style="margin-top: 10px;">
-                <i class="fa-solid fa-check"></i> 更新
-            </button>
+    <div class="bg-white p-8 md:p-10 rounded-2xl shadow-xl border border-gray-100 w-full max-w-md mx-4 text-center">
+        <div class="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i class="fa-solid fa-envelope-open-text text-3xl"></i>
         </div>
+        <h1 class="text-2xl font-extrabold text-gray-800 mb-4">メールをご確認ください</h1>
+        <p class="text-gray-600 text-sm leading-relaxed mb-8">
+            パスワードの再設定は、送信されたメールに記載されているリンクから行ってください。<br><br>
+            ※この画面は使用しません。
+        </p>
         
-        <div class="auth-links">
-            <a href="login.html">ログイン画面に戻る</a>
-        </div>
+        <a href="login.html" class="inline-block px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-colors">
+            ログイン画面へ
+        </a>
     </div>
     
-    <style>
-        .reset-form.hidden { display: none; }
-        #error-message.hidden { display: none; }
-        #loading-message.hidden { display: none; }
-        #update-credential-btn.hidden { display: none; }
-    </style>
-
-    <!-- 共通スクリプト (API連携) -->
-    <script src="common.js"></script>
-    <script>
+    <script type="module">
+        import { initCommonUI } from './common.js';
         document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const mode = urlParams.get('mode');
-            const email = urlParams.get('email'); // API連携時に使用
-            
-            const loadingMsg = document.getElementById('loading-message');
-            const errorMsg = document.getElementById('error-message');
-            const updateBtn = document.getElementById('update-credential-btn');
-
-            let activeForm = null;
-            let payload = {
-                mode: mode,
-                email: email
-            };
-
-            if (mode && email) {
-                loadingMsg.classList.add('hidden');
-                updateBtn.classList.remove('hidden');
-
-                if (mode === 'id_reset') {
-                    activeForm = document.getElementById('id-reset-form');
-                } else if (mode === 'password_reset') {
-                    activeForm = document.getElementById('password-reset-form');
-                } else if (mode === 'id_password_reset') {
-                    activeForm = document.getElementById('id-password-reset-form');
-                }
-                
-                if (activeForm) {
-                    activeForm.classList.remove('hidden');
-                    // 更新ボタンにアクティブなフォームを関連付ける
-                    updateBtn.setAttribute('form', activeForm.id);
-                } else {
-                    // modeが不正
-                    errorMsg.classList.remove('hidden');
-                    updateBtn.classList.add('hidden');
-                }
-
-            } else {
-                // パラメータが不足
-                loadingMsg.classList.add('hidden');
-                errorMsg.classList.remove('hidden');
-            }
-
-            // 更新ボタンクリック時の処理
-            updateBtn.addEventListener('click', async (e) => {
-                // activeForm を使って入力値を取得
-                let currentPassword, newID, currentID, newPassword;
-
-                if (mode === 'id_reset') {
-                    currentPassword = document.getElementById('current-password-id').value;
-                    newID = document.getElementById('new-id-id').value;
-                    if (!currentPassword || !newID) { alert('入力欄をすべて埋めてください。'); return; }
-                    payload.currentPassword = currentPassword;
-                    payload.newID = newID;
-
-                } else if (mode === 'password_reset') {
-                    currentID = document.getElementById('current-id-pw').value;
-                    newPassword = document.getElementById('new-password-pw').value;
-                    if (!currentID || !newPassword) { alert('入力欄をすべて埋めてください。'); return; }
-                    payload.currentID = currentID;
-                    payload.newPassword = newPassword;
-                    
-                } else if (mode === 'id_password_reset') {
-                    newID = document.getElementById('new-id-all').value;
-                    newPassword = document.getElementById('new-password-all').value;
-                    if (!newID || !newPassword) { alert('入力欄をすべて埋めてください。'); return; }
-                    payload.newID = newID;
-                    payload.newPassword = newPassword;
-                } else {
-                    return; // activeFormがない
-                }
-
-                try {
-                    const data = await callGasApi('resetCredential', payload);
-                    alert(data.message || '更新が完了しました。');
-                    window.location.href = 'login.html';
-                } catch (error) {
-                    console.error('認証情報の更新に失敗:', error);
-                }
-            });
+            initCommonUI('BloSke');
         });
     </script>
 </body>
