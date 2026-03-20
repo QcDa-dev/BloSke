@@ -4,47 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>リリースノート - BloSke</title>
-    
-    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-    <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
-
-    <!-- Firebase SDK (common.js より先に読み込む) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-
     <!-- marked.js (Markdown -> HTML) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body>
-
-    <main>
-        <div class="content-page">
-            <h1>リリースノート</h1>
-            
-            <div id="loading-releases" style="text-align: center; padding: 20px;">
-                <p>リリース情報を読み込んでいます...</p>
-            </div>
-            
-            <div id="release-notes-container">
-                <!-- GitHub APIから取得した内容がここに入ります -->
-            </div>
+<body class="pt-16 pb-16 bg-gray-50 flex flex-col min-h-screen">
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-3xl">
+        <h1 class="text-3xl font-extrabold text-blue-600 mb-8 text-center">リリースノート</h1>
+        
+        <div id="loading-releases" class="text-center py-12 text-gray-500">
+            <i class="fa-solid fa-spinner fa-spin fa-2x mb-3 text-blue-500"></i>
+            <p>リリース情報を読み込んでいます...</p>
+        </div>
+        
+        <div id="release-notes-container" class="space-y-6">
+            <!-- GitHub APIから取得した内容 -->
         </div>
     </main>
 
-    <!-- 共通スクリプト -->
-    <script src="common.js"></script>
-    <script>
+    <script type="module">
+        import { initCommonUI } from './common.js';
+
         document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIを初期化
             initCommonUI('BloSke');
 
-            // --- GitHub Releases API から情報を取得 (仕様書 3.2.9) ---
-            const GITHUB_REPO = 'qcda-dev/BloSke'; // リポジトリ名
+            // --- GitHub Releases API から情報を取得 ---
+            const GITHUB_REPO = 'qcda-dev/BloSke'; // 既存の指定リポジトリ
             const API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
 
             const container = document.getElementById('release-notes-container');
@@ -52,33 +40,31 @@
 
             fetch(API_URL)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`GitHub API エラー: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
                     return response.json();
                 })
                 .then(releases => {
-                    loading.style.display = 'none';
+                    loading.classList.add('hidden');
                     if (releases.length === 0) {
-                        container.innerHTML = '<p>リリース情報はまだありません。</p>';
+                        container.innerHTML = `
+                            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center text-gray-500">
+                                リリース情報はまだありません。
+                            </div>`;
                         return;
                     }
 
                     releases.forEach(release => {
-                        const releaseDate = new Date(release.published_at).toLocaleString('ja-JP');
+                        const releaseDate = new Date(release.published_at).toLocaleDateString('ja-JP', {year:'numeric', month:'long', day:'numeric'});
+                        const bodyHtml = marked.parse(release.body || '内容がありません');
                         
                         const entry = document.createElement('div');
-                        entry.className = 'release-entry';
-                        
-                        // marked.js を使って Markdown を HTML に変換
-                        const bodyHtml = marked.parse(release.body);
-                        
+                        entry.className = 'bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100';
                         entry.innerHTML = `
-                            <div class="release-header">
-                                <h2 class="release-title">${release.name || release.tag_name}</h2>
-                                <span class="release-date">${releaseDate}</span>
+                            <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 pb-4 mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">${release.name || release.tag_name}</h2>
+                                <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full mt-2 md:mt-0 w-fit">${releaseDate}</span>
                             </div>
-                            <div class="release-body">
+                            <div class="markdown-body text-gray-700">
                                 ${bodyHtml}
                             </div>
                         `;
@@ -86,9 +72,14 @@
                     });
                 })
                 .catch(error => {
-                    loading.style.display = 'none';
-                    console.error('リリースノートの取得に失敗:', error);
-                    container.innerHTML = '<p style="color: red;">リリースノートの取得に失敗しました。</p>';
+                    loading.classList.add('hidden');
+                    console.error('Fetch Error:', error);
+                    container.innerHTML = `
+                        <div class="bg-red-50 p-6 rounded-xl border border-red-100 text-center text-red-600">
+                            <i class="fa-solid fa-circle-exclamation mb-2 text-xl"></i><br>
+                            リリースノートの取得に失敗しました。<br>
+                            <span class="text-sm opacity-80">※リポジトリが非公開、またはURLが間違っている可能性があります。</span>
+                        </div>`;
                 });
         });
     </script>
