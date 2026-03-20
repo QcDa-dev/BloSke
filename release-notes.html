@@ -4,32 +4,95 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>リリースノート - BloSke</title>
+    
+    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- Font Awesome (アイコン用) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
+
     <!-- marked.js (Markdown -> HTML) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body class="pt-16 pb-16 bg-gray-50 flex flex-col min-h-screen">
-    <main class="flex-grow container mx-auto px-4 py-8 max-w-3xl">
-        <h1 class="text-3xl font-extrabold text-blue-600 mb-8 text-center">リリースノート</h1>
-        
-        <div id="loading-releases" class="text-center py-12 text-gray-500">
-            <i class="fa-solid fa-spinner fa-spin fa-2x mb-3 text-blue-500"></i>
-            <p>リリース情報を読み込んでいます...</p>
+<body>
+
+    <!-- ヘッダー -->
+    <header>
+        <a href="index.html" class="app-title">BloSke</a>
+        <button id="hamburger-btn" class="menu-btn"><i class="fa-solid fa-bars"></i></button>
+    </header>
+
+    <!-- ハンバーガーメニュー -->
+    <div id="menu-overlay" class="menu-overlay"></div>
+    <nav id="side-menu" class="side-menu">
+        <div class="menu-header">
+            <span class="menu-title">Menu</span>
+            <button id="close-menu-btn" class="close-menu-btn"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        
-        <div id="release-notes-container" class="space-y-6">
-            <!-- GitHub APIから取得した内容 -->
+        <div class="menu-content">
+            <a href="guide.html" target="_blank" class="menu-item"><i class="fa-solid fa-book-open"></i>使い方ガイド</a>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSdlvIr5ehyy3dInl_XTkA5F64H7yFIigL2dzFW0IoXnl8ajdw/viewform?usp=dialog" target="_blank" class="menu-item"><i class="fa-solid fa-envelope"></i>お問い合わせ</a>
+            <a href="release-notes.html" class="menu-item"><i class="fa-solid fa-bullhorn"></i>リリースノート</a>
+            
+            <div class="menu-separator"></div>
+            <div style="height: 10px;"></div>
+            
+            <a href="https://qcda-dev.github.io/HP/" target="_blank" class="menu-item"><i class="fa-solid fa-house"></i>QcDa Projectとは</a>
+            <a href="https://qcda-dev.github.io/HP/terms-of-service.html" target="_blank" class="menu-sub-item">利用規約</a>
+            <a href="https://qcda-dev.github.io/HP/community-guidelines.html" target="_blank" class="menu-sub-item">コミュニティガイドライン</a>
+        </div>
+        <div class="menu-version">
+            ver 2.0.0
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main>
+        <div class="content-page">
+            <h1>リリースノート</h1>
+            
+            <div id="loading-releases" class="loading-container">
+                <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+                <p>リリース情報を読み込んでいます...</p>
+            </div>
+            
+            <div id="release-notes-container" class="release-list">
+                <!-- GitHub APIから取得した内容がここに入ります -->
+            </div>
         </div>
     </main>
 
-    <script type="module">
-        import { initCommonUI } from './common.js';
+    <!-- フッター -->
+    <footer>
+        &copy; 2026 QcDa Project. All Rights Reserved.
+    </footer>
 
+    <!-- Firebase SDK / 共通ロジック (現状の構成に合わせる) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="common.js"></script>
+
+    <script>
         document.addEventListener('DOMContentLoaded', () => {
-            initCommonUI('BloSke');
+            // --- ハンバーガーメニュー制御 ---
+            const hamburgerBtn = document.getElementById('hamburger-btn');
+            const closeMenuBtn = document.getElementById('close-menu-btn');
+            const sideMenu = document.getElementById('side-menu');
+            const menuOverlay = document.getElementById('menu-overlay');
+
+            function toggleMenu() {
+                sideMenu.classList.toggle('active');
+                menuOverlay.classList.toggle('active');
+            }
+
+            if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleMenu);
+            if (closeMenuBtn) closeMenuBtn.addEventListener('click', toggleMenu);
+            if (menuOverlay) menuOverlay.addEventListener('click', toggleMenu);
 
             // --- GitHub Releases API から情報を取得 ---
             const GITHUB_REPO = 'qcda-dev/BloSke'; // 既存の指定リポジトリ
@@ -44,27 +107,27 @@
                     return response.json();
                 })
                 .then(releases => {
-                    loading.classList.add('hidden');
+                    loading.style.display = 'none';
                     if (releases.length === 0) {
-                        container.innerHTML = `
-                            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center text-gray-500">
-                                リリース情報はまだありません。
-                            </div>`;
+                        container.innerHTML = '<div class="empty-state">リリース情報はまだありません。</div>';
                         return;
                     }
 
                     releases.forEach(release => {
-                        const releaseDate = new Date(release.published_at).toLocaleDateString('ja-JP', {year:'numeric', month:'long', day:'numeric'});
+                        // 日付をフォーマット
+                        const releaseDate = new Date(release.published_at).toLocaleDateString('ja-JP', {year:'numeric', month:'short', day:'numeric'});
+                        
+                        // MarkdownをHTMLにパース
                         const bodyHtml = marked.parse(release.body || '内容がありません');
                         
                         const entry = document.createElement('div');
-                        entry.className = 'bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100';
+                        entry.className = 'release-entry';
                         entry.innerHTML = `
-                            <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 pb-4 mb-4">
-                                <h2 class="text-2xl font-bold text-gray-800">${release.name || release.tag_name}</h2>
-                                <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full mt-2 md:mt-0 w-fit">${releaseDate}</span>
+                            <div class="release-header">
+                                <h2 class="release-title">${release.name || release.tag_name}</h2>
+                                <span class="release-date">${releaseDate}</span>
                             </div>
-                            <div class="markdown-body text-gray-700">
+                            <div class="release-body markdown-body">
                                 ${bodyHtml}
                             </div>
                         `;
@@ -72,13 +135,13 @@
                     });
                 })
                 .catch(error => {
-                    loading.classList.add('hidden');
+                    loading.style.display = 'none';
                     console.error('Fetch Error:', error);
                     container.innerHTML = `
-                        <div class="bg-red-50 p-6 rounded-xl border border-red-100 text-center text-red-600">
-                            <i class="fa-solid fa-circle-exclamation mb-2 text-xl"></i><br>
+                        <div class="error-state">
+                            <i class="fa-solid fa-circle-exclamation"></i><br>
                             リリースノートの取得に失敗しました。<br>
-                            <span class="text-sm opacity-80">※リポジトリが非公開、またはURLが間違っている可能性があります。</span>
+                            <span style="font-size:0.85rem; opacity:0.8; display:block; margin-top:5px;">※リポジトリが非公開、またはURLが間違っている可能性があります。</span>
                         </div>`;
                 });
         });
