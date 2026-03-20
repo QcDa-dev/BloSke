@@ -4,1127 +4,746 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>編集画面 - BloSke</title>
-    
-    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-    <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
-
-    <!-- Firebase SDK (common.js より先に読み込む) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-
-    <!-- このページ専用のスタイル -->
-    <style>
-        /* (common.css で定義済み) */
-        
-        /* Canvasのカーソル制御 */
-        #timetableCanvas {
-            cursor: default;
-        }
-        #timetableCanvas.edit-mode-active {
-            cursor: pointer; /* 編集モード時はポインター */
-        }
-        #timetableCanvas.dragging {
-            cursor: grab; /* ドラッグ可能 */
-        }
-        #timetableCanvas.dragging:active {
-            cursor: grabbing; /* 掴んでいる最中 */
-        }
-    </style>
 </head>
-<body>
-
-    <main>
-        <div id="edit-container">
-            <!-- プロジェクト名 -->
-            <h2 id="project-title" class="project-title" title="クリックして編集">my project</h2>
-
-            <!-- ボタンフィールド -->
-            <div class="button-field">
-                <button id="add-block-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> ブロック追加</button>
-                <button id="edit-mode-btn" class="btn btn-secondary"><i class="fa-solid fa-pen"></i> 編集モード</button>
-                <button id="toggle-view-btn" class="btn btn-secondary"><i class="fa-solid fa-arrows-left-right"></i> 縦横切替</button>
-                <button id="save-btn" class="btn btn-secondary"><i class="fa-solid fa-save"></i> 保存</button>
-                <button id="export-img-btn" class="btn btn-secondary"><i class="fa-solid fa-image"></i> 画像出力</button>
-                <button id="reset-btn" class="btn btn-secondary" style="color: #dc3545;"><i class="fa-solid fa-trash"></i> リセット</button>
+<body class="pt-16 pb-16 bg-gray-100 flex flex-col h-screen overflow-hidden">
+    <!-- PC向け2カラムレイアウト: 左サイドバー + 右キャンバス -->
+    <main class="flex-grow flex flex-col md:flex-row w-full h-full overflow-hidden">
+        
+        <!-- 左サイドバー (操作パネル) -->
+        <aside class="w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col h-1/3 md:h-full flex-shrink-0 z-10 shadow-md">
+            <!-- プロジェクトヘッダー -->
+            <div class="p-5 border-b border-gray-100 bg-gray-50">
+                <input type="text" id="project-title-input" value="my project" class="w-full text-2xl font-extrabold text-gray-800 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:bg-white transition-colors px-2 py-1 truncate" title="クリックして編集">
             </div>
 
-            <!-- タイムテーブルフィールド (Canvas) -->
-            <div id="timetable-canvas-container">
-                <canvas id="timetableCanvas" width="1000" height="400">
-                    お使いのブラウザはCanvasに対応していません。
-                </canvas>
+            <!-- 操作ボタン -->
+            <div class="p-4 grid grid-cols-2 gap-3 border-b border-gray-100">
+                <button id="add-block-btn" class="col-span-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> ブロック追加
+                </button>
+                <button id="save-btn" class="py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-save"></i> 保存
+                </button>
+                <button id="export-img-btn" class="py-2 bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-image"></i> 画像出力
+                </button>
+            </div>
+
+            <!-- ブロックリスト (PCで見やすい一覧) -->
+            <div class="flex-grow overflow-y-auto p-4 bg-gray-50">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-700 text-sm">登録ブロック一覧</h3>
+                    <button id="reset-btn" class="text-xs text-red-500 hover:text-red-700 font-semibold"><i class="fa-solid fa-trash-can"></i> 全てクリア</button>
+                </div>
+                <div id="block-list-container" class="space-y-2 pb-10">
+                    <!-- リストアイテムがJSで挿入される -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右メイン領域 (Canvas) -->
+        <section class="flex-grow relative bg-gray-200 flex flex-col h-2/3 md:h-full overflow-hidden">
+            <div id="canvas-wrapper" class="w-full h-full overflow-auto relative cursor-grab active:cursor-grabbing bg-white">
+                <canvas id="timetableCanvas" class="block bg-white shadow-sm"></canvas>
             </div>
             
-            <!-- オプション -->
-            <div class="canvas-options">
-                <input type="checkbox" id="two-column-toggle">
-                <label for="two-column-toggle">2段組表示</label>
+            <!-- キャンバス用ズーム等コントロール (オーバーレイ) -->
+            <div class="absolute bottom-4 right-6 flex gap-2">
+                 <button id="fit-width-btn" class="p-2.5 bg-white text-gray-700 rounded-lg shadow-md border border-gray-200 hover:bg-gray-50" title="幅を合わせる">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
             </div>
-        </div>
+        </section>
     </main>
 
-    <!-- ブロック情報編集ウィンドウ (モーダル) -->
-    <div id="block-edit-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h2 id="block-modal-title" class="modal-title">ブロック情報</h2>
-            <form id="block-edit-form">
+    <!-- ブロック編集モーダル -->
+    <div id="block-edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-center items-center p-4 backdrop-blur-sm transition-opacity opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 md:p-8 transform transition-all scale-95" id="block-edit-modal-content">
+            <div class="flex justify-between items-center border-b pb-4 mb-5">
+                <h2 id="block-modal-title" class="text-xl font-bold text-gray-800">ブロック情報</h2>
+                <button id="close-modal-icon" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark fa-lg"></i></button>
+            </div>
+            
+            <form id="block-edit-form" class="space-y-4">
                 <input type="hidden" id="block-id"> 
                 
-                <div class="form-group">
-                    <label for="block-name">ブロック名</label>
-                    <input type="text" id="block-name" class="form-input" required>
+                <div>
+                    <label for="block-name" class="block text-sm font-semibold text-gray-700 mb-1">ブロック名 <span class="text-red-500">*</span></label>
+                    <input type="text" id="block-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
                 </div>
                 
-                <div style="display: flex; gap: 10px;">
-                    <div class="form-group" style="flex: 2;">
-                        <label for="block-start-date">開始日</label>
-                        <input type="date" id="block-start-date" class="form-input" required>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">開始日時 <span class="text-red-500">*</span></label>
+                        <div class="flex flex-col xl:flex-row gap-2">
+                            <input type="date" id="block-start-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                            <input type="time" id="block-start-time" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                        </div>
                     </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label for="block-start-time">開始時刻</label>
-                        <input type="time" id="block-start-time" class="form-input" required>
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px;">
-                    <div class="form-group" style="flex: 2;">
-                        <label for="block-end-date">終了日</label>
-                        <input type="date" id="block-end-date" class="form-input" required>
-                    </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label for="block-end-time">終了時刻</label>
-                        <input type="time" id="block-end-time" class="form-input" required>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">終了日時 <span class="text-red-500">*</span></label>
+                        <div class="flex flex-col xl:flex-row gap-2">
+                            <input type="date" id="block-end-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                            <input type="time" id="block-end-time" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>カラー</label>
-                    <div id="color-picker" style="display: flex; justify-content: space-around; padding: 10px 0;">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">テーマカラー</label>
+                    <div id="color-picker" class="flex flex-wrap gap-3 p-2 bg-gray-50 rounded-lg border border-gray-100">
                         <!-- JSで動的に生成 -->
                     </div>
                     <input type="hidden" id="block-color" value="#3B82F6">
                 </div>
 
-                <div class="modal-actions">
-                    <button type="button" id="cancel-block-edit-btn" class="btn btn-secondary">キャンセル</button>
-                    <button type="submit" class="btn btn-primary">決定</button>
+                <div class="flex justify-end gap-3 pt-4 border-t mt-6">
+                    <button type="button" id="delete-block-btn" class="hidden px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 font-semibold rounded-lg transition-colors mr-auto border border-red-200"><i class="fa-solid fa-trash-can"></i> 削除</button>
+                    <button type="button" id="cancel-block-edit-btn" class="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-colors">キャンセル</button>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition-colors">決定</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 共通スクリプト -->
-    <script src="common.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
+    <script type="module">
+        import { initCommonUI, auth, db, doc, setDoc, getDoc, APP_ID, showLoading, hideLoading } from './common.js';
+
+        document.addEventListener('DOMContentLoaded', async () => {
             initCommonUI('BloSke');
 
-            // --- グローバル変数・定数 ---
-            const projectNameEl = document.getElementById('project-title');
-            const canvasContainer = document.getElementById('timetable-canvas-container');
+            // --- 状態管理 ---
+            let projectBlocks = [];
+            let projectId = null; // Firestore上のドキュメントID
+            const userId = auth.currentUser ? auth.currentUser.uid : null;
+
+            // DOM Elements
+            const titleInput = document.getElementById('project-title-input');
+            const wrapper = document.getElementById('canvas-wrapper');
             const canvas = document.getElementById('timetableCanvas');
             const ctx = canvas.getContext('2d');
+            const blockListContainer = document.getElementById('block-list-container');
             
-            const PADDING_MAIN = 60;  
-            const PADDING_CROSS = 70; // ★修正: ヘッダー余白を増やして日付表示スペースを確保
-            const ROW_SIZE = 60;      
-            const GAP_2COL = 100; 
-            const DELETE_BTN_SIZE = 20;
-            const HEADER_HEIGHT_EXPORT = 80; 
+            // モーダル
+            const modal = document.getElementById('block-edit-modal');
+            const modalContent = document.getElementById('block-edit-modal-content');
+            const form = document.getElementById('block-edit-form');
+            const colorPicker = document.getElementById('color-picker');
+            const blockColorInput = document.getElementById('block-color');
+            const deleteBlockBtn = document.getElementById('delete-block-btn');
+
+            // Canvas描画設定 (ガントチャート風)
+            const ROW_HEIGHT = 60;
+            const PADDING_TOP = 60; // 時間軸表示エリア
+            const PADDING_X = 40;
+            const PIXELS_PER_MINUTE = 2; // 1分あたりのピクセル数 (ズームで可変にする場合はここを調整)
             
-            const FONT_S = '12px sans-serif';
-            const FONT_M = '14px sans-serif';
-            const FONT_L = 'bold 14px sans-serif';
-            const FONT_TITLE = 'bold 24px sans-serif';
+            let minTimeMs = 0;
+            let maxTimeMs = 0;
+            let layoutRowCount = 1;
+
+            let isDraggingBlock = false;
+            let dragTarget = null;
+            let dragStartX = 0;
+            let dragStartY = 0;
+            let originalStartMs = 0;
+            let originalEndMs = 0;
+            let originalRow = 0;
             
-            let projectBlocks = []; 
-            let currentProjectName = '新規プロジェクト';
-            let isEditMode = false;
-            let editingBlockId = null;
-            
-            let isVertical = false;   
-            let isTwoColumn = false;  
+            let isPanning = false;
+            let panStartX = 0;
+            let panStartY = 0;
+            let scrollLeftStart = 0;
+            let scrollTopStart = 0;
 
-            let minTimeMs = 0; 
-            let maxTimeMs = 0; 
-            let totalDurationMs = 0; 
-            let pxPerMs = 0; 
-            let layoutRowCount = 0; 
-            
-            let contentOffsetX = 0;
-            let contentOffsetY = 0;
+            let animationFrameId = null;
 
-            let isDragging = false;
-            let dragTargetBlock = null;
-            let dragStartPos = { x: 0, y: 0 }; 
-            let dragCurrentPos = { x: 0, y: 0 }; 
-            let dragOriginalStartMs = 0;
-            let dragOriginalEndMs = 0;
-            let dragOriginalRow = 0; 
-            let dragOffset = 0; 
-            let dragCrossOffset = 0; 
+            // --- 初期化ロジック ---
+            const urlParams = new URLSearchParams(window.location.search);
+            projectId = urlParams.get('id');
 
-            const appIcon = new Image();
-            appIcon.src = 'icon.svg';
-
-            // --- 1. データ読み込み・初期化 ---
-
-            function parseCsvData(csvData) {
-                const lines = csvData.trim().split('\n');
-                const blocks = [];
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i];
-                    const parts = line.split(',').map(part => part.trim().replace(/"/g, ''));
-                    if (parts.length >= 4) {
-                        blocks.push({
-                            id: Date.now().toString() + i,
-                            name: parts[0],
-                            startISO: parts[1],
-                            endISO: parts[2],
-                            color: parts[3],
-                            layoutRow: -1
-                        });
-                    }
-                }
-                return blocks;
-            }
-
-            function loadFromLocalStorage() {
+            if (projectId && userId) {
+                // 既存プロジェクトのロード
+                showLoading();
                 try {
-                    const dataStr = localStorage.getItem('bloske_local_project');
-                    if (!dataStr) return;
-                    const data = JSON.parse(dataStr);
-                    currentProjectName = data.name || '復元プロジェクト';
-                    projectBlocks = data.blocks || [];
-                } catch (e) {
-                    console.error('ローカルストレージ復元失敗:', e);
-                    localStorage.removeItem('bloske_local_project');
-                }
-            }
-            
-            function saveToLocalStorage() {
-                const data = { name: currentProjectName, blocks: projectBlocks };
-                localStorage.setItem('bloske_local_project', JSON.stringify(data));
-            }
-
-            // --- 2. レイアウトロジック ---
-
-            function findAvailableRow(targetBlock) {
-                const targetStart = new Date(targetBlock.startISO).getTime();
-                const targetEnd = new Date(targetBlock.endISO).getTime();
-                let row = 0;
-                while (true) {
-                    const conflict = projectBlocks.some(other => {
-                        if (other === targetBlock || other.layoutRow !== row) return false;
-                        const otherStart = new Date(other.startISO).getTime();
-                        const otherEnd = new Date(other.endISO).getTime();
-                        return targetStart < otherEnd && targetEnd > otherStart;
-                    });
-                    if (!conflict) return row;
-                    row++;
-                }
-            }
-
-            function assignLayoutRows() {
-                projectBlocks.forEach(block => {
-                    if (typeof block.layoutRow === 'undefined' || block.layoutRow === -1) {
-                        block.layoutRow = findAvailableRow(block);
+                    const docRef = doc(db, 'artifacts', APP_ID, 'users', userId, 'projects', projectId);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        titleInput.value = data.name || '無題のプロジェクト';
+                        projectBlocks = data.blocks || [];
+                    } else {
+                        alert("指定されたプロジェクトは見つかりませんでした。新規作成として開始します。");
+                        projectId = null;
                     }
-                });
+                } catch (e) {
+                    console.error("Load Error:", e);
+                    alert("データの読み込みに失敗しました。");
+                } finally {
+                    hideLoading();
+                }
+            } else {
+                // 新規プロジェクト
+                const sessionName = sessionStorage.getItem('bloske_current_project_name');
+                if (sessionName) {
+                    titleInput.value = sessionName;
+                }
             }
 
-            function calculateRowCount() {
-                let maxRow = -1;
-                projectBlocks.forEach(block => {
-                    if (block.layoutRow > maxRow) maxRow = block.layoutRow;
+            // --- カラーパレット設定 ---
+            const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#F472B6', '#14B8A6', '#64748B'];
+            colors.forEach(color => {
+                const circle = document.createElement('div');
+                circle.className = 'w-8 h-8 rounded-full cursor-pointer border-2 transition-transform hover:scale-110';
+                circle.style.backgroundColor = color;
+                circle.style.borderColor = color === blockColorInput.value ? '#1e293b' : 'transparent';
+                circle.dataset.color = color;
+                
+                circle.addEventListener('click', () => {
+                    blockColorInput.value = color;
+                    Array.from(colorPicker.children).forEach(c => c.style.borderColor = 'transparent');
+                    circle.style.borderColor = '#1e293b';
                 });
-                layoutRowCount = Math.max(1, maxRow + 2); 
-            }
+                colorPicker.appendChild(circle);
+            });
 
-            // --- 3. Canvas描画ロジック ---
-
-            function updateTimelineBounds() {
+            // --- Canvas 描画ロジック ---
+            function updateBoundsAndRows() {
                 if (projectBlocks.length === 0) {
                     const now = new Date();
-                    minTimeMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime(); 
-                    maxTimeMs = minTimeMs + (4 * 60 * 60 * 1000); 
+                    now.setMinutes(0,0,0);
+                    minTimeMs = now.getTime();
+                    maxTimeMs = minTimeMs + (4 * 60 * 60 * 1000); // デフォルト4時間
+                    layoutRowCount = 1;
                     return;
                 }
+                
                 let minStart = Infinity;
                 let maxEnd = -Infinity;
-                projectBlocks.forEach(block => {
-                    const start = new Date(block.startISO).getTime();
-                    const end = new Date(block.endISO).getTime();
-                    if (start < minStart) minStart = start;
-                    if (end > maxEnd) maxEnd = end;
+                projectBlocks.forEach(b => {
+                    const s = new Date(b.startISO).getTime();
+                    const e = new Date(b.endISO).getTime();
+                    if (s < minStart) minStart = s;
+                    if (e > maxEnd) maxEnd = e;
+                });
+
+                // 前後30分程度の余白を持たせる
+                minTimeMs = minStart - (30 * 60 * 1000);
+                maxTimeMs = maxEnd + (30 * 60 * 1000);
+
+                // Rowの計算 (愚直に被りをチェックして割り当て)
+                // ソートして配置
+                const sorted = [...projectBlocks].sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
+                let maxRow = 0;
+                sorted.forEach(target => {
+                    if (target === dragTarget && isDraggingBlock) return; // ドラッグ中は元のRowを保持または動的に計算
+                    
+                    let row = 0;
+                    const tStart = new Date(target.startISO).getTime();
+                    const tEnd = new Date(target.endISO).getTime();
+                    
+                    while (true) {
+                        const conflict = sorted.some(other => {
+                            if (other === target) return false;
+                            if (other.layoutRow !== row) return false;
+                            if (other === dragTarget && isDraggingBlock) return false; // ドラッグ中のは無視
+                            const oStart = new Date(other.startISO).getTime();
+                            const oEnd = new Date(other.endISO).getTime();
+                            // 少しだけマージンをもたせる判定
+                            return (tStart < oEnd) && (tEnd > oStart); 
+                        });
+                        if (!conflict) break;
+                        row++;
+                    }
+                    target.layoutRow = row;
+                    if (row > maxRow) maxRow = row;
                 });
                 
-                const roundMs = (ms, up) => {
-                    const d = new Date(ms);
-                    const m = d.getMinutes();
-                    if (up) {
-                        if (m > 30) d.setHours(d.getHours() + 1, 0, 0, 0);
-                        else if (m > 0) d.setMinutes(30, 0, 0);
+                // ドラッグ中の要素の行判定 (Y座標ベース)
+                if (isDraggingBlock && dragTarget) {
+                    let r = Math.floor((dragStartY - PADDING_TOP) / ROW_HEIGHT);
+                    if (r < 0) r = 0;
+                    dragTarget.layoutRow = r;
+                    if (r > maxRow) maxRow = r;
+                }
+
+                layoutRowCount = maxRow + 2; // 下に1行余白
+            }
+
+            function requestRender() {
+                if (!animationFrameId) {
+                    animationFrameId = requestAnimationFrame(renderCanvas);
+                }
+            }
+
+            function formatTime(ms) {
+                const d = new Date(ms);
+                const h = String(d.getHours()).padStart(2, '0');
+                const m = String(d.getMinutes()).padStart(2, '0');
+                return `${h}:${m}`;
+            }
+
+            function renderCanvas() {
+                animationFrameId = null;
+                updateBoundsAndRows();
+
+                const totalMinutes = (maxTimeMs - minTimeMs) / 60000;
+                const canvasW = Math.max(wrapper.clientWidth, (totalMinutes * PIXELS_PER_MINUTE) + (PADDING_X * 2));
+                const canvasH = Math.max(wrapper.clientHeight, PADDING_TOP + (layoutRowCount * ROW_HEIGHT) + 40);
+
+                // デバイスピクセル比に対応してくっきり描画
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = canvasW * dpr;
+                canvas.height = canvasH * dpr;
+                canvas.style.width = `${canvasW}px`;
+                canvas.style.height = `${canvasH}px`;
+                ctx.scale(dpr, dpr);
+
+                // 背景
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvasW, canvasH);
+
+                // 時間軸の描画 (30分刻み)
+                ctx.beginPath();
+                ctx.strokeStyle = '#e2e8f0'; // slate-200
+                ctx.lineWidth = 1;
+                ctx.fillStyle = '#64748b'; // slate-500
+                ctx.font = '12px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const startMinuteRounded = Math.floor(minTimeMs / (30*60*1000)) * (30*60*1000);
+                for (let t = startMinuteRounded; t <= maxTimeMs; t += 30 * 60 * 1000) {
+                    const x = PADDING_X + ((t - minTimeMs) / 60000) * PIXELS_PER_MINUTE;
+                    if (x < PADDING_X || x > canvasW - PADDING_X) continue;
+
+                    // 縦線
+                    ctx.moveTo(x, PADDING_TOP - 10);
+                    ctx.lineTo(x, canvasH);
+                    
+                    // テキスト
+                    const isHour = new Date(t).getMinutes() === 0;
+                    if (isHour) {
+                        ctx.fillStyle = '#334155'; // 濃く
+                        ctx.font = 'bold 13px Inter, sans-serif';
                     } else {
-                        if (m >= 30) d.setMinutes(30, 0, 0);
-                        else d.setMinutes(0, 0, 0);
+                        ctx.fillStyle = '#94a3b8'; // 薄く
+                        ctx.font = '11px Inter, sans-serif';
                     }
-                    return d.getTime();
+                    ctx.fillText(formatTime(t), x, PADDING_TOP - 20);
+                }
+                ctx.stroke();
+
+                // ブロック描画領域のベースライン
+                ctx.beginPath();
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.moveTo(0, PADDING_TOP);
+                ctx.lineTo(canvasW, PADDING_TOP);
+                ctx.stroke();
+
+                // 行のガイドライン
+                ctx.beginPath();
+                ctx.strokeStyle = '#f1f5f9';
+                for (let i = 1; i <= layoutRowCount; i++) {
+                    ctx.moveTo(0, PADDING_TOP + i * ROW_HEIGHT);
+                    ctx.lineTo(canvasW, PADDING_TOP + i * ROW_HEIGHT);
+                }
+                ctx.stroke();
+
+                // ブロックの描画
+                projectBlocks.forEach(block => {
+                    const isDrag = (block === dragTarget && isDraggingBlock);
+                    
+                    const startMs = new Date(block.startISO).getTime();
+                    const endMs = new Date(block.endISO).getTime();
+                    
+                    let drawStartMs = startMs;
+                    let drawEndMs = endMs;
+                    let row = block.layoutRow;
+
+                    if (isDrag) {
+                        // ドラッグ中の位置をピクセルから逆算
+                        const deltaMs = ((dragStartX - PADDING_X) / PIXELS_PER_MINUTE * 60000) - originalStartMs;
+                        // 実際にはマウス位置から時間を計算する
+                        const currentMouseMs = minTimeMs + ((dragStartX - PADDING_X) / PIXELS_PER_MINUTE * 60000);
+                        const offsetMs = currentMouseMs - originalStartMs; //掴んだ位置のオフセットはマウスダウン時に計算しておくべき。
+                        // ここはシンプルに:
+                        // マウスのX座標を「ブロックの左端の時間」とする（掴んだオフセット考慮）
+                    }
+
+                    // 描画座標計算
+                    let x = PADDING_X + ((startMs - minTimeMs) / 60000) * PIXELS_PER_MINUTE;
+                    let w = ((endMs - startMs) / 60000) * PIXELS_PER_MINUTE;
+                    let y = PADDING_TOP + (row * ROW_HEIGHT) + 10;
+                    let h = ROW_HEIGHT - 20;
+
+                    if (isDrag) {
+                        // ドラッグ中はマウス座標ベースで直接描画位置を上書き
+                        x = dragStartX;
+                        y = dragStartY;
+                        // 透明度を下げる
+                        ctx.globalAlpha = 0.6;
+                        // 時間表示も更新
+                    } else {
+                        ctx.globalAlpha = 1.0;
+                    }
+
+                    // ヒットボックス保存 (ドラッグ中以外)
+                    if (!isDrag) {
+                        block.hitBox = { x, y, w, h };
+                    }
+
+                    // 角丸矩形
+                    ctx.fillStyle = block.color || '#3B82F6';
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, Math.max(w, 10), h, 6); // API support needs fallback if old browser, but standard now
+                    ctx.fill();
+
+                    // テキスト
+                    ctx.fillStyle = '#ffffff';
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(x, y, w, h);
+                    ctx.clip(); // はみ出し防止
+
+                    ctx.font = 'bold 14px "Noto Sans JP", sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(block.name, x + 8, y + 6);
+
+                    // 時間
+                    ctx.font = '11px Inter, sans-serif';
+                    const timeStr = `${formatTime(startMs)} - ${formatTime(endMs)}`;
+                    ctx.fillText(timeStr, x + 8, y + 24);
+
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                });
+                
+                updateSidebarList();
+            }
+
+            // Canvas Polyfill for roundRect
+            if (!CanvasRenderingContext2D.prototype.roundRect) {
+                CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                    if (w < 2 * r) r = w / 2;
+                    if (h < 2 * r) r = h / 2;
+                    this.moveTo(x + r, y);
+                    this.arcTo(x + w, y, x + w, y + h, r);
+                    this.arcTo(x + w, y + h, x, y + h, r);
+                    this.arcTo(x, y + h, x, y, r);
+                    this.arcTo(x, y, x + w, y, r);
+                    this.closePath();
+                    return this;
                 };
-                minTimeMs = roundMs(minStart, false);
-                maxTimeMs = roundMs(maxEnd, true);
-                if (maxTimeMs - minTimeMs < 3600000) maxTimeMs = minTimeMs + 3600000;
             }
 
-            function formatTime(date) {
-                return date.toTimeString().substring(0, 5);
-            }
-            
-            function formatDate(date) {
-                return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-            }
-
-            function getRect(timeStart, timeEnd, row, section, isExport) {
-                const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
-                const midTimeMs = minTimeMs + (totalDurationMs / 2);
-                const sectionStartMs = (section === 0) ? minTimeMs : midTimeMs;
-                
-                const relStart = timeStart - sectionStartMs;
-                const relEnd = timeEnd - sectionStartMs;
-                
-                const length = (relEnd - relStart) * pxPerMs;
-                const startPos = PADDING_MAIN + (relStart * pxPerMs);
-                
-                let baseCross = 0;
-                if (isTwoColumn && section === 1) {
-                    baseCross = (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                }
-
-                const rowPos = PADDING_CROSS + topMargin + baseCross + (row * ROW_SIZE);
-
-                if (!isVertical) {
-                    return {
-                        x: startPos + contentOffsetX, 
-                        y: rowPos + contentOffsetY,   
-                        w: length,
-                        h: ROW_SIZE * 0.8
-                    };
-                } else {
-                    return {
-                        x: rowPos + contentOffsetX,   
-                        y: startPos + contentOffsetY, 
-                        w: ROW_SIZE * 0.8,
-                        h: length
-                    };
-                }
-            }
-
-            function wrapText(ctx, text, maxWidth) {
-                const words = text.split('');
-                let lines = [];
-                let currentLine = words[0];
-                for (let i = 1; i < words.length; i++) {
-                    const word = words[i];
-                    const width = ctx.measureText(currentLine + word).width;
-                    if (width < maxWidth) {
-                        currentLine += word;
-                    } else {
-                        lines.push(currentLine);
-                        currentLine = word;
-                    }
-                }
-                lines.push(currentLine);
-                return lines;
-            }
-
-            function drawTimeline(targetCtx, isExport) {
-                const topMargin = isExport ? HEADER_HEIGHT_EXPORT : 0;
-                assignLayoutRows();
-                updateTimelineBounds();
-                calculateRowCount();
-
-                totalDurationMs = maxTimeMs - minTimeMs;
-                const displayDurationMs = isTwoColumn ? (totalDurationMs / 2) : totalDurationMs;
-
-                const contentMainLength = (displayDurationMs * (800 / (4 * 3600000))) + PADDING_MAIN * 2;
-                let contentCrossLength = (layoutRowCount * ROW_SIZE) + PADDING_CROSS * 2 + topMargin;
-                if (isTwoColumn) {
-                    contentCrossLength = (contentCrossLength - PADDING_CROSS * 2 - topMargin) * 2 + GAP_2COL + PADDING_CROSS * 2 + topMargin;
-                }
-                
-                const minWidth = isExport ? 1200 : canvasContainer.clientWidth;
-                const minHeight = isExport ? (contentCrossLength + 100) : 400;
-
-                let canvasW, canvasH;
-                if (!isVertical) {
-                    canvasW = Math.max(minWidth, contentMainLength);
-                    canvasH = Math.max(minHeight, contentCrossLength);
-                } else {
-                    canvasW = Math.max(minWidth, contentCrossLength);
-                    canvasH = Math.max(minHeight, contentMainLength);
-                }
-
-                targetCtx.canvas.width = canvasW;
-                targetCtx.canvas.height = canvasH;
-
-                pxPerMs = (contentMainLength - PADDING_MAIN * 2) / displayDurationMs;
-
-                if (!isVertical) {
-                    contentOffsetX = Math.max(0, (canvasW - contentMainLength) / 2);
-                    contentOffsetY = Math.max(0, (canvasH - contentCrossLength) / 2);
-                } else {
-                    contentOffsetX = Math.max(0, (canvasW - contentCrossLength) / 2);
-                    contentOffsetY = Math.max(0, (canvasH - contentMainLength) / 2);
-                }
-
-                targetCtx.fillStyle = '#ffffff';
-                targetCtx.fillRect(0, 0, canvasW, canvasH);
-
-                if (isExport) {
-                    const iconSize = 50;
-                    targetCtx.drawImage(appIcon, 20, 15, iconSize, iconSize);
-                    targetCtx.fillStyle = '#333';
-                    targetCtx.font = FONT_TITLE;
-                    targetCtx.textAlign = 'left';
-                    targetCtx.textBaseline = 'middle';
-                    targetCtx.fillText(`BloSke - ${currentProjectName}`, 20 + iconSize + 15, 15 + iconSize / 2);
-                    targetCtx.textBaseline = 'alphabetic'; 
-                }
-
+            // --- サイドバーリストの更新 ---
+            function updateSidebarList() {
+                blockListContainer.innerHTML = '';
                 if (projectBlocks.length === 0) {
-                    targetCtx.fillStyle = '#adb5bd';
-                    targetCtx.font = '16px sans-serif';
-                    targetCtx.textAlign = 'center';
-                    targetCtx.fillText('イベントが1つも登録されていません。', canvasW / 2, canvasH / 2);
+                    blockListContainer.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">ブロックがありません</p>';
                     return;
                 }
-
-                if (!isExport) {
-                    projectBlocks.forEach(b => b.hitBoxes = []);
-                }
-
-                const sections = isTwoColumn ? 2 : 1;
-                const midTimeMs = minTimeMs + (totalDurationMs / 2);
-
-                for (let section = 0; section < sections; section++) {
-                    const secStart = (section === 0) ? minTimeMs : midTimeMs;
-                    const secEnd = (section === 0) ? (isTwoColumn ? midTimeMs : maxTimeMs) : maxTimeMs;
-
-                    const FOUR_HOURS = 4 * 3600000;
-                    const stepMs = (totalDurationMs <= FOUR_HOURS) ? 1800000 : 3600000;
-                    
-                    targetCtx.strokeStyle = '#e9ecef'; 
-                    targetCtx.fillStyle = '#868e96'; 
-                    targetCtx.font = FONT_S;
-                    targetCtx.textAlign = 'center';
-                    targetCtx.textBaseline = 'middle';
-
-                    const layoutStartRow = 0;
-                    const layoutEndRow = layoutRowCount;
-
-                    for (let t = secStart; t <= secEnd; t += stepMs) {
-                        if (t === secStart || t === secEnd) continue;
-
-                        const rectStart = getRect(t, t, layoutStartRow, section, isExport);
-                        const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
-                        
-                        targetCtx.beginPath();
-                        if (!isVertical) {
-                            targetCtx.moveTo(rectStart.x, rectStart.y - 10); 
-                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
-                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x, rectStart.y - 15);
-                            
-                            // ★修正: 0:00に日付表示 (位置調整: PADDING_CROSS増加分を活用)
-                            const d = new Date(t);
-                            if (d.getHours() === 0 && d.getMinutes() === 0) {
-                                targetCtx.font = FONT_S; 
-                                targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 35); // 上にずらす
-                                targetCtx.font = FONT_S; 
-                            }
-                        } else {
-                            targetCtx.moveTo(rectStart.x - 10, rectStart.y);
-                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
-                            targetCtx.textAlign = 'right';
-                            targetCtx.fillText(formatTime(new Date(t)), rectStart.x - 15, rectStart.y);
-                            
-                            const d = new Date(t);
-                            if (d.getHours() === 0 && d.getMinutes() === 0) {
-                                targetCtx.font = FONT_S;
-                                targetCtx.fillText(formatDate(d), rectStart.x - 15, rectStart.y - 15);
-                                targetCtx.font = FONT_S;
-                            }
-                            targetCtx.textAlign = 'center';
-                        }
-                        targetCtx.stroke();
-                    }
-
-                    targetCtx.strokeStyle = '#333';
-                    targetCtx.lineWidth = 2;
-                    targetCtx.fillStyle = '#333';
-                    targetCtx.font = FONT_L;
-
-                    [secStart, secEnd].forEach(t => {
-                        const rectStart = getRect(t, t, layoutStartRow, section, isExport);
-                        const rectEnd = getRect(t, t, layoutEndRow, section, isExport);
-                        
-                        targetCtx.beginPath();
-                        const d = new Date(t);
-
-                        if (!isVertical) {
-                            targetCtx.moveTo(rectStart.x, rectStart.y - 20);
-                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
-                            targetCtx.fillText(formatTime(d), rectStart.x, rectStart.y - 25);
-                            
-                            // ★修正: 両端には常に日付を表示 (被りなし位置へ)
-                            targetCtx.font = FONT_S;
-                            targetCtx.fillText(formatDate(d), rectStart.x, rectStart.y - 40);
-                            targetCtx.font = FONT_L;
-                            
-                        } else {
-                            targetCtx.moveTo(rectStart.x - 20, rectStart.y);
-                            targetCtx.lineTo(rectEnd.x, rectEnd.y);
-                            targetCtx.textAlign = 'right';
-                            targetCtx.fillText(formatTime(d), rectStart.x - 25, rectStart.y);
-
-                             // ★修正: 両端には常に日付を表示
-                            targetCtx.font = FONT_S;
-                            targetCtx.fillText(formatDate(d), rectStart.x - 25, rectStart.y - 15);
-                            targetCtx.font = FONT_L;
-
-                            targetCtx.textAlign = 'center';
-                        }
-                        targetCtx.stroke();
-                    });
-                    targetCtx.lineWidth = 1;
-
-                    const renderBlockInSection = (block, isDragRender) => {
-                        const bStart = new Date(block.startISO).getTime();
-                        const bEnd = new Date(block.endISO).getTime();
-
-                        if (bEnd <= secStart || bStart >= secEnd) return;
-
-                        const drawStart = Math.max(bStart, secStart);
-                        const drawEnd = Math.min(bEnd, secEnd);
-
-                        let rect = getRect(drawStart, drawEnd, block.layoutRow, section, isExport);
-
-                        if (isDragRender) return; 
-
-                        targetCtx.fillStyle = block.color;
-                        targetCtx.globalAlpha = 1.0;
-                        roundRect(targetCtx, rect.x, rect.y, rect.w, rect.h, 5, true, false);
-
-                        targetCtx.fillStyle = '#ffffff';
-                        targetCtx.font = FONT_L;
-                        
-                        if (!isVertical) {
-                            targetCtx.save();
-                            targetCtx.beginPath();
-                            targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                            targetCtx.clip();
-                            targetCtx.textAlign = 'left';
-                            targetCtx.fillText(block.name, rect.x + 8, rect.y + 20);
-                            targetCtx.font = FONT_S;
-                            if (bStart >= secStart) targetCtx.fillText(formatTime(new Date(bStart)), rect.x + 8, rect.y + 38);
-                            if (bEnd <= secEnd) {
-                                targetCtx.textAlign = 'right';
-                                targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w - 8, rect.y + 38);
-                            }
-                            targetCtx.restore();
-                        } else {
-                            // 縦表示
-                            targetCtx.save();
-                            targetCtx.beginPath();
-                            targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                            targetCtx.clip();
-                            
-                            targetCtx.textAlign = 'center';
-                            targetCtx.textBaseline = 'middle';
-                            const lines = wrapText(targetCtx, block.name, rect.w - 10);
-                            const lineHeight = 16;
-                            const textY = rect.y + rect.h / 2 - ((lines.length - 1) * lineHeight) / 2;
-                            
-                            lines.forEach((line, i) => {
-                                targetCtx.fillText(line, rect.x + rect.w / 2, textY + i * lineHeight);
-                            });
-                            targetCtx.restore();
-
-                            targetCtx.font = FONT_S;
-                            targetCtx.fillStyle = '#333';
-                            targetCtx.textAlign = 'center';
-                            
-                            if (bStart >= secStart) {
-                                targetCtx.textBaseline = 'bottom';
-                                targetCtx.fillText(formatTime(new Date(bStart)), rect.x + rect.w / 2, rect.y - 2);
-                            }
-                            if (bEnd <= secEnd) {
-                                targetCtx.textBaseline = 'top';
-                                targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w / 2, rect.y + rect.h + 2);
-                            }
-                            targetCtx.textBaseline = 'alphabetic';
-                        }
-
-                        if (!isExport) {
-                            block.hitBoxes.push({
-                                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
-                                section: section
-                            });
-
-                            if (isEditMode) {
-                                const delX = rect.x + rect.w - DELETE_BTN_SIZE + 5;
-                                const delY = rect.y - 5;
-                                targetCtx.fillStyle = 'rgba(220, 53, 69, 1)';
-                                targetCtx.beginPath();
-                                targetCtx.arc(delX, delY, DELETE_BTN_SIZE / 2, 0, Math.PI * 2);
-                                targetCtx.fill();
-                                targetCtx.fillStyle = '#ffffff';
-                                targetCtx.font = 'bold 12px sans-serif';
-                                targetCtx.textAlign = 'center';
-                                targetCtx.textBaseline = 'middle';
-                                targetCtx.fillText('×', delX, delY);
-                                targetCtx.textBaseline = 'alphabetic';
-                                
-                                if (!block.deleteHitBoxes) block.deleteHitBoxes = [];
-                                block.deleteHitBoxes.push({ 
-                                    x: delX - DELETE_BTN_SIZE/2, 
-                                    y: delY - DELETE_BTN_SIZE/2, 
-                                    width: DELETE_BTN_SIZE, 
-                                    height: DELETE_BTN_SIZE 
-                                });
-                            } else {
-                                block.deleteHitBoxes = [];
-                            }
-                        }
-                    };
-
-                    projectBlocks.forEach(b => {
-                        if (b !== dragTargetBlock) renderBlockInSection(b, false);
-                    });
-                } 
-
-                if (isDragging && dragTargetBlock) {
-                    const bStart = new Date(dragTargetBlock.startISO).getTime();
-                    const bEnd = new Date(dragTargetBlock.endISO).getTime();
-                    const duration = bEnd - bStart;
-                    const length = duration * pxPerMs;
-                    
-                    const deltaX = dragCurrentPos.x - dragStartPos.x;
-                    const deltaY = dragCurrentPos.y - dragStartPos.y;
-
-                    let originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
-                    
-                    let rect = {
-                        x: originalRect.x + deltaX,
-                        y: originalRect.y + deltaY,
-                        w: (!isVertical) ? length : ROW_SIZE * 0.8,
-                        h: (!isVertical) ? ROW_SIZE * 0.8 : length
-                    };
-
-                    targetCtx.globalAlpha = 0.7;
-                    targetCtx.fillStyle = dragTargetBlock.color;
-                    roundRect(targetCtx, rect.x, rect.y, rect.w, rect.h, 5, true, false);
-                    targetCtx.globalAlpha = 1.0;
-                    
-                    targetCtx.fillStyle = '#ffffff';
-                    targetCtx.font = FONT_L;
-                    targetCtx.save();
-                    targetCtx.beginPath();
-                    targetCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                    targetCtx.clip();
-                    
-                    if (!isVertical) {
-                        targetCtx.textAlign = 'left';
-                        targetCtx.fillText(dragTargetBlock.name, rect.x + 8, rect.y + 20);
-                        targetCtx.font = FONT_S;
-                        targetCtx.fillText(formatTime(new Date(bStart)), rect.x + 8, rect.y + 38);
-                        targetCtx.textAlign = 'right';
-                        targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w - 8, rect.y + 38);
-                    } else {
-                        targetCtx.textAlign = 'center';
-                        targetCtx.textBaseline = 'top';
-                        targetCtx.fillText(dragTargetBlock.name, rect.x + rect.w/2, rect.y + 5);
-                        targetCtx.font = FONT_S;
-                        targetCtx.fillText(formatTime(new Date(bStart)) + ' - ' + formatTime(new Date(bEnd)), rect.x + rect.w/2, rect.y + 25);
-                        targetCtx.textBaseline = 'alphabetic';
-                    }
-                    targetCtx.restore();
-                    
-                    if(isVertical) {
-                        targetCtx.font = FONT_S;
-                        targetCtx.fillStyle = '#333';
-                        targetCtx.textAlign = 'center';
-                        targetCtx.textBaseline = 'bottom';
-                        targetCtx.fillText(formatTime(new Date(bStart)), rect.x + rect.w / 2, rect.y - 2);
-                        targetCtx.textBaseline = 'top';
-                        targetCtx.fillText(formatTime(new Date(bEnd)), rect.x + rect.w / 2, rect.y + rect.h + 2);
-                        targetCtx.textBaseline = 'alphabetic';
-                    }
-                }
-
-                if (isExport) {
-                    const now = new Date();
-                    const dateStr = now.toLocaleString('ja-JP');
-                    targetCtx.fillStyle = '#888';
-                    targetCtx.font = '12px sans-serif';
-                    targetCtx.textAlign = 'right';
-                    targetCtx.fillText(`出力日時: ${dateStr}`, canvasW - 20, canvasH - 10);
-                }
+                const sorted = [...projectBlocks].sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
+                sorted.forEach(block => {
+                    const item = document.createElement('div');
+                    item.className = 'bg-white p-3 rounded border border-gray-200 shadow-sm flex items-center justify-between group cursor-pointer hover:border-blue-400 transition-colors';
+                    item.innerHTML = `
+                        <div class="flex items-center gap-2 overflow-hidden">
+                            <div class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${block.color || '#3B82F6'}"></div>
+                            <div class="truncate">
+                                <div class="text-sm font-bold text-gray-800 truncate">${escapeHTML(block.name)}</div>
+                                <div class="text-xs text-gray-500">${formatTime(new Date(block.startISO).getTime())} - ${formatTime(new Date(block.endISO).getTime())}</div>
+                            </div>
+                        </div>
+                        <button class="text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 edit-list-btn" title="編集">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                    `;
+                    // リストクリックで編集モーダル
+                    item.addEventListener('click', () => openModal(block));
+                    blockListContainer.appendChild(item);
+                });
             }
 
-            function drawCanvas() {
-                drawTimeline(ctx, false);
-            }
-            
-            function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-                if (typeof stroke === 'undefined') { stroke = true; }
-                if (typeof radius === 'undefined') { radius = 5; }
-                ctx.beginPath();
-                ctx.moveTo(x + radius, y);
-                ctx.lineTo(x + width - radius, y);
-                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-                ctx.lineTo(x + width, y + height - radius);
-                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-                ctx.lineTo(x + radius, y + height);
-                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-                ctx.lineTo(x, y + radius);
-                ctx.quadraticCurveTo(x, y, x + radius, y);
-                ctx.closePath();
-                if (fill) { ctx.fill(); }
-                if (stroke) { ctx.stroke(); }
-            }
+            function escapeHTML(str) { return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]); }
 
-            // --- イベント処理 ---
 
-            function getCanvasCoordinates(e) {
+            // --- インタラクション (マウス・タッチ) ---
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            function getMousePos(e) {
                 const rect = canvas.getBoundingClientRect();
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
                 const clientY = e.clientY || (e.touches && e.touches[0].clientY);
                 return {
-                    x: clientX - rect.left + canvasContainer.scrollLeft,
-                    y: clientY - rect.top + canvasContainer.scrollTop
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
                 };
             }
 
-            function handleInputStart(e) {
-                if (isEditMode) {
-                    handleClickInEditMode(e);
-                    return;
-                }
-                const pos = getCanvasCoordinates(e);
+            canvas.addEventListener('mousedown', handleDown);
+            canvas.addEventListener('mousemove', handleMove);
+            canvas.addEventListener('mouseup', handleUp);
+            canvas.addEventListener('mouseleave', handleUp);
+            canvas.addEventListener('touchstart', handleDown, {passive: false});
+            canvas.addEventListener('touchmove', handleMove, {passive: false});
+            canvas.addEventListener('touchend', handleUp);
+
+            function handleDown(e) {
+                const pos = getMousePos(e);
                 
-                for (const block of [...projectBlocks].reverse()) {
-                    if (!block.hitBoxes) continue;
-                    for (const h of block.hitBoxes) {
-                        if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
-                            isDragging = true;
-                            dragTargetBlock = block;
+                // ブロックヒットテスト (逆順で上にあるものを優先)
+                for (let i = projectBlocks.length - 1; i >= 0; i--) {
+                    const b = projectBlocks[i];
+                    if (b.hitBox) {
+                        if (pos.x >= b.hitBox.x && pos.x <= b.hitBox.x + b.hitBox.w &&
+                            pos.y >= b.hitBox.y && pos.y <= b.hitBox.y + b.hitBox.h) {
                             
-                            if (!isVertical) {
-                                dragStartX = pos.x;
-                                dragStartY = pos.y;
-                                dragOffset = 0; 
-                                dragCrossOffset = pos.y - h.y;
-                            } else {
-                                dragStartX = pos.x;
-                                dragStartY = pos.y;
-                                dragOffset = 0;
-                                dragCrossOffset = pos.x - h.x;
-                            }
+                            isDraggingBlock = true;
+                            dragTarget = b;
+                            dragOffsetX = pos.x - b.hitBox.x;
+                            dragOffsetY = pos.y - b.hitBox.y;
                             
-                            dragCurrentPos = { 
-                                x: pos.x - (isVertical ? dragCrossOffset : 0), 
-                                y: pos.y - (isVertical ? 0 : dragCrossOffset) 
-                            };
-                            
-                            dragOriginalStartMs = new Date(block.startISO).getTime();
-                            dragOriginalEndMs = new Date(block.endISO).getTime();
-                            dragOriginalRow = block.layoutRow; 
+                            dragStartX = b.hitBox.x;
+                            dragStartY = b.hitBox.y;
+                            originalStartMs = new Date(b.startISO).getTime();
+                            originalEndMs = new Date(b.endISO).getTime();
                             
                             canvas.classList.add('dragging');
-                            if (e.type === 'touchstart') e.preventDefault(); 
-                            return; 
+                            if(e.type==='touchstart') e.preventDefault();
+                            return;
                         }
                     }
                 }
+
+                // ブロックに当たらなければパン (スクロール) 処理へ
+                isPanning = true;
+                panStartX = e.clientX || (e.touches && e.touches[0].clientX);
+                panStartY = e.clientY || (e.touches && e.touches[0].clientY);
+                scrollLeftStart = wrapper.scrollLeft;
+                scrollTopStart = wrapper.scrollTop;
             }
 
-            function handleClickInEditMode(e) {
-                const pos = getCanvasCoordinates(e);
-                for (const block of [...projectBlocks].reverse()) {
-                    if (block.deleteHitBoxes) {
-                        for (const d of block.deleteHitBoxes) {
-                            if (pos.x >= d.x && pos.x <= d.x + d.width && pos.y >= d.y && pos.y <= d.y + d.height) {
-                                if (confirm(`「${block.name}」を本当に削除しますか？`)) {
-                                    projectBlocks = projectBlocks.filter(b => b.id !== block.id);
-                                    saveToLocalStorage();
-                                    drawCanvas();
-                                }
-                                return;
-                            }
-                        }
-                    }
-                    if (block.hitBoxes) {
-                        for (const h of block.hitBoxes) {
-                            if (pos.x >= h.x && pos.x <= h.x + h.width && pos.y >= h.y && pos.y <= h.y + h.height) {
-                                openEditModal(block);
-                                return;
-                            }
-                        }
-                    }
+            function handleMove(e) {
+                if (isDraggingBlock && dragTarget) {
+                    if(e.type==='touchmove') e.preventDefault();
+                    const pos = getMousePos(e);
+                    
+                    dragStartX = pos.x - dragOffsetX;
+                    dragStartY = pos.y - dragOffsetY;
+                    
+                    // 時間の逆算 (スナップ: 5分単位)
+                    const msPerPixel = 60000 / PIXELS_PER_MINUTE;
+                    let newStartMs = minTimeMs + ((dragStartX - PADDING_X) * msPerPixel);
+                    
+                    // 5分(300000ms)単位にスナップ
+                    const snapMs = 5 * 60000;
+                    newStartMs = Math.round(newStartMs / snapMs) * snapMs;
+                    
+                    const duration = originalEndMs - originalStartMs;
+                    
+                    dragTarget.startISO = new Date(newStartMs).toISOString();
+                    dragTarget.endISO = new Date(newStartMs + duration).toISOString();
+                    
+                    requestRender();
+                } else if (isPanning) {
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                    const dx = clientX - panStartX;
+                    const dy = clientY - panStartY;
+                    wrapper.scrollLeft = scrollLeftStart - dx;
+                    wrapper.scrollTop = scrollTopStart - dy;
                 }
             }
 
-            function handleInputMove(e) {
-                if (!isDragging || !dragTargetBlock) return;
-                e.preventDefault(); 
-                const pos = getCanvasCoordinates(e);
-                dragCurrentPos = { x: pos.x, y: pos.y }; // 現在位置を更新
-                
-                let deltaMs = 0;
-                // 時間軸方向のマウス移動量から時間差分を計算
-                if (!isVertical) {
-                    const deltaPixel = pos.x - dragStartPos.x;
-                    deltaMs = deltaPixel / pxPerMs;
-                } else {
-                    const deltaPixel = pos.y - dragStartPos.y;
-                    deltaMs = deltaPixel / pxPerMs;
-                }
-
-                const newStartMs = dragOriginalStartMs + deltaMs;
-                const newEndMs = dragOriginalEndMs + deltaMs;
-                dragTargetBlock.startISO = new Date(newStartMs).toISOString();
-                dragTargetBlock.endISO = new Date(newEndMs).toISOString();
-                
-                drawCanvas(); 
-            }
-
-            function handleInputEnd(e) {
-                if (isDragging) {
-                    isDragging = false;
+            function handleUp(e) {
+                if (isDraggingBlock) {
+                    isDraggingBlock = false;
+                    dragTarget = null;
                     canvas.classList.remove('dragging');
-                    
-                    let dropRow = 0;
-                    let targetCoord = 0;
-                    
-                    const deltaX = dragCurrentPos.x - dragStartPos.x;
-                    const deltaY = dragCurrentPos.y - dragStartPos.y;
-                    const originalRect = getRect(dragOriginalStartMs, dragOriginalEndMs, dragOriginalRow, 0, false);
-                    const droppedRectY = originalRect.y + deltaY;
-                    const droppedRectX = originalRect.x + deltaX;
-
-                    if (!isVertical) {
-                        let relY = droppedRectY - contentOffsetY;
-                        const lowerStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                        if (isTwoColumn && relY >= lowerStart) {
-                            relY -= (lowerStart - PADDING_CROSS); 
-                        }
-                        targetCoord = relY;
-                    } else {
-                        let relX = droppedRectX - contentOffsetX;
-                        const rightStart = PADDING_CROSS + (layoutRowCount * ROW_SIZE) + GAP_2COL;
-                        if (isTwoColumn && relX >= rightStart) {
-                            relX -= (rightStart - PADDING_CROSS);
-                        }
-                        targetCoord = relX;
-                    }
-                    
-                    dropRow = Math.round((targetCoord - PADDING_CROSS) / ROW_SIZE);
-                    if (dropRow < 0) dropRow = 0;
-
-                    const targetStart = new Date(dragTargetBlock.startISO).getTime();
-                    const targetEnd = new Date(dragTargetBlock.endISO).getTime();
-
-                    // スワップ処理（掴んでいるブロックを優先）
-                    let finalRow = dropRow;
-                    
-                    const conflictingBlocks = projectBlocks.filter(b => {
-                        if (b === dragTargetBlock) return false;
-                        if (b.layoutRow !== dropRow) return false;
-                        const bStart = new Date(b.startISO).getTime();
-                        const bEnd = new Date(b.endISO).getTime();
-                        return targetStart < bEnd && targetEnd > bStart;
-                    });
-
-                    if (conflictingBlocks.length > 0) {
-                        finalRow = dropRow;
-                        let blocksToMove = [...conflictingBlocks];
-                        
-                        while (blocksToMove.length > 0) {
-                            const movingBlock = blocksToMove.shift();
-                            let newRow = movingBlock.layoutRow + 1;
-                            while (true) {
-                                const conflictInNewRow = projectBlocks.some(b => {
-                                    if (b === movingBlock) return false; 
-                                    if (blocksToMove.includes(b)) return false;
-                                    if (b.layoutRow !== newRow) return false;
-                                    
-                                    const mStart = new Date(movingBlock.startISO).getTime();
-                                    const mEnd = new Date(movingBlock.endISO).getTime();
-                                    const bStart = new Date(b.startISO).getTime();
-                                    const bEnd = new Date(b.endISO).getTime();
-                                    return mStart < bEnd && mEnd > bStart;
-                                });
-
-                                if (!conflictInNewRow) {
-                                    movingBlock.layoutRow = newRow;
-                                    break;
-                                } else {
-                                    newRow++;
-                                }
-                            }
-                        }
-                    } else {
-                        finalRow = dropRow;
-                    }
-
-                    dragTargetBlock.layoutRow = finalRow;
-                    dragTargetBlock = null;
-
-                    saveToLocalStorage(); 
-                    drawCanvas();
+                    requestRender(); // 最終位置で確定描画
                 }
+                isPanning = false;
             }
 
-            // ... イベントリスナー登録 ...
-            projectNameEl.addEventListener('click', () => {
-                const newName = prompt('新しいプロジェクト名を入力してください:', currentProjectName);
-                if (newName && newName.trim() !== '') {
-                    currentProjectName = newName.trim();
-                    projectNameEl.textContent = currentProjectName;
-                    saveToLocalStorage(); 
-                }
+            // クリック（長押し判定なしの単純なクリックで編集）は、今回は左サイドバーのリストから行えるのでCanvasからの編集は必須ではないが、利便性のため残す。
+            canvas.addEventListener('click', (e) => {
+                if (isDraggingBlock || isPanning) return; // 動かした後は無視したいが、ここでは簡易的に。
+                // 実際には downとupの距離が小さい時にクリックとするのが定石
             });
-            document.getElementById('toggle-view-btn').addEventListener('click', (e) => {
-                isVertical = !isVertical;
-                e.target.disabled = false; 
-                drawCanvas();
-            });
-            document.getElementById('two-column-toggle').addEventListener('change', (e) => {
-                isTwoColumn = e.target.checked;
-                drawCanvas();
-            });
-            document.getElementById('toggle-view-btn').disabled = false;
-            document.getElementById('two-column-toggle').disabled = false;
 
-            document.getElementById('add-block-btn').addEventListener('click', () => {
-                editingBlockId = null; 
-                document.getElementById('block-modal-title').textContent = 'ブロック追加';
-                document.getElementById('block-edit-form').reset();
-                document.getElementById('block-id').value = '';
-                const now = new Date();
-                const yyyyMMdd = now.toISOString().split('T')[0];
-                const hhMM = now.toTimeString().substring(0, 5);
-                document.getElementById('block-start-date').value = yyyyMMdd;
-                document.getElementById('block-start-time').value = hhMM;
-                document.getElementById('block-end-date').value = yyyyMMdd;
-                document.getElementById('block-end-time').value = hhMM;
-                const blockColorInput = document.getElementById('block-color');
-                const colorPicker = document.getElementById('color-picker');
-                blockColorInput.value = '#3B82F6';
-                 Array.from(colorPicker.children).forEach((child, index) => {
-                    child.style.borderColor = (index === 0) ? '#333' : 'transparent';
-                });
-                showModal('block-edit-modal');
-            });
-            document.getElementById('edit-mode-btn').addEventListener('click', (e) => {
-                isEditMode = !isEditMode;
-                const btn = e.currentTarget;
-                if (isEditMode) {
-                    btn.innerHTML = '<i class="fa-solid fa-check"></i> 編集モード終了';
-                    btn.classList.add('btn-primary');
-                    btn.classList.remove('btn-secondary');
-                    canvas.classList.add('edit-mode-active');
+
+            // --- モーダル・フォーム操作 ---
+            const openModal = (block = null) => {
+                form.reset();
+                deleteBlockBtn.classList.add('hidden');
+                document.getElementById('block-modal-title').textContent = block ? 'ブロック編集' : 'ブロック追加';
+                
+                if (block) {
+                    document.getElementById('block-id').value = block.id;
+                    document.getElementById('block-name').value = block.name;
+                    const s = new Date(block.startISO);
+                    const e = new Date(block.endISO);
+                    // yyyy-MM-dd format (ローカルタイムで合わせる)
+                    const sDate = s.toLocaleDateString('ja-JP').split('/').map(n=>n.padStart(2,'0')).join('-');
+                    const eDate = e.toLocaleDateString('ja-JP').split('/').map(n=>n.padStart(2,'0')).join('-');
+                    document.getElementById('block-start-date').value = sDate;
+                    document.getElementById('block-start-time').value = String(s.getHours()).padStart(2,'0') + ':' + String(s.getMinutes()).padStart(2,'0');
+                    document.getElementById('block-end-date').value = eDate;
+                    document.getElementById('block-end-time').value = String(e.getHours()).padStart(2,'0') + ':' + String(e.getMinutes()).padStart(2,'0');
+                    blockColorInput.value = block.color || '#3B82F6';
+                    deleteBlockBtn.classList.remove('hidden');
                 } else {
-                    btn.innerHTML = '<i class="fa-solid fa-pen"></i> 編集モード';
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                    canvas.classList.remove('edit-mode-active');
+                    document.getElementById('block-id').value = '';
+                    const now = new Date();
+                    const sDate = now.toLocaleDateString('ja-JP').split('/').map(n=>n.padStart(2,'0')).join('-');
+                    const t = String(now.getHours()).padStart(2,'0') + ':00';
+                    document.getElementById('block-start-date').value = sDate;
+                    document.getElementById('block-start-time').value = t;
+                    document.getElementById('block-end-date').value = sDate;
+                    document.getElementById('block-end-time').value = String(now.getHours()+1).padStart(2,'0') + ':00';
+                    blockColorInput.value = '#3B82F6';
                 }
-                drawCanvas(); 
+
+                Array.from(colorPicker.children).forEach(c => {
+                    c.style.borderColor = c.dataset.color === blockColorInput.value ? '#1e293b' : 'transparent';
+                });
+
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modalContent.classList.remove('scale-95', 'opacity-0');
+                    modalContent.classList.add('scale-100', 'opacity-100');
+                    document.getElementById('block-name').focus();
+                }, 10);
+            };
+
+            const closeModal = () => {
+                modalContent.classList.remove('scale-100', 'opacity-100');
+                modalContent.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => { modal.classList.add('hidden'); }, 200);
+            };
+
+            document.getElementById('add-block-btn').addEventListener('click', () => openModal());
+            document.getElementById('cancel-block-edit-btn').addEventListener('click', closeModal);
+            document.getElementById('close-modal-icon').addEventListener('click', closeModal);
+
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('block-id').value;
+                const name = document.getElementById('block-name').value;
+                const sd = document.getElementById('block-start-date').value;
+                const st = document.getElementById('block-start-time').value;
+                const ed = document.getElementById('block-end-date').value;
+                const et = document.getElementById('block-end-time').value;
+                const color = document.getElementById('block-color').value;
+
+                // ISO文字列化
+                const startISO = new Date(`${sd}T${st}`).toISOString();
+                const endISO = new Date(`${ed}T${et}`).toISOString();
+
+                if (new Date(endISO) <= new Date(startISO)) {
+                    alert('終了日時は開始日時より後に設定してください。');
+                    return;
+                }
+
+                if (id) {
+                    const idx = projectBlocks.findIndex(b => b.id === id);
+                    if (idx > -1) {
+                        projectBlocks[idx] = { ...projectBlocks[idx], name, startISO, endISO, color };
+                    }
+                } else {
+                    projectBlocks.push({
+                        id: crypto.randomUUID(),
+                        name, startISO, endISO, color, layoutRow: -1
+                    });
+                }
+                
+                closeModal();
+                requestRender();
             });
+
+            deleteBlockBtn.addEventListener('click', () => {
+                const id = document.getElementById('block-id').value;
+                if (id && confirm('このブロックを削除しますか？')) {
+                    projectBlocks = projectBlocks.filter(b => b.id !== id);
+                    closeModal();
+                    requestRender();
+                }
+            });
+
             document.getElementById('reset-btn').addEventListener('click', () => {
-                if (confirm('プロジェクトをリセットしますか？\n（すべてのブロックが削除されます）')) {
+                if(confirm('すべてのブロックを削除しますか？')){
                     projectBlocks = [];
-                    saveToLocalStorage();
-                    drawCanvas();
+                    requestRender();
                 }
             });
-            document.getElementById('save-btn').addEventListener('click', () => {
-                const user = getUserSession();
-                if (!user) {
-                    alert('プロジェクトを保存するにはログインが必要です。');
+
+            // --- Firestore 保存 ---
+            document.getElementById('save-btn').addEventListener('click', async () => {
+                if (!auth.currentUser) {
+                    alert('保存するにはログインが必要です。');
                     sessionStorage.setItem('login_redirect_reason', 'save');
                     window.location.href = 'login.html';
                     return;
                 }
-                saveProjectData(user.username);
+                
+                const title = titleInput.value.trim() || '無題のプロジェクト';
+                showLoading();
+                try {
+                    const pId = projectId || crypto.randomUUID();
+                    const docRef = doc(db, 'artifacts', APP_ID, 'users', auth.currentUser.uid, 'projects', pId);
+                    
+                    await setDoc(docRef, {
+                        name: title,
+                        blocks: projectBlocks,
+                        updatedAt: Date.now()
+                    });
+                    
+                    if (!projectId) {
+                        projectId = pId; // 新規保存時にIDをセット
+                        // URLを更新しておくとリロード時に復帰できる (history API)
+                        const url = new URL(window.location);
+                        url.searchParams.set('id', projectId);
+                        window.history.pushState({}, '', url);
+                    }
+                    alert('保存しました！');
+                } catch (e) {
+                    console.error("Save Error:", e);
+                    alert("保存に失敗しました。");
+                } finally {
+                    hideLoading();
+                }
             });
+
+            // --- 画像出力 ---
             document.getElementById('export-img-btn').addEventListener('click', () => {
                 if (projectBlocks.length === 0) {
                     alert('出力するブロックがありません。');
                     return;
                 }
                 try {
-                    const exportCanvas = document.createElement('canvas');
-                    const exportCtx = exportCanvas.getContext('2d');
-                    drawTimeline(exportCtx, true); 
-                    const dataUrl = exportCanvas.toDataURL('image/png');
-                    const now = new Date();
-                    const yyyy = now.getFullYear();
-                    const MM = String(now.getMonth() + 1).padStart(2, '0');
-                    const dd = String(now.getDate()).padStart(2, '0');
-                    const HH = String(now.getHours()).padStart(2, '0');
-                    const mm = String(now.getMinutes()).padStart(2, '0');
-                    const fileName = `${currentProjectName}_${yyyy}${MM}${dd}_${HH}${mm}.png`;
+                    // 背景を確実に白にしてから出力
+                    const dataUrl = canvas.toDataURL('image/png');
                     const link = document.createElement('a');
-                    link.download = fileName;
+                    link.download = `${titleInput.value.trim()}_timetable.png`;
                     link.href = dataUrl;
-                    document.body.appendChild(link);
                     link.click();
-                    document.body.removeChild(link);
                 } catch (e) {
-                    console.error('画像出力エラー:', e);
+                    console.error('Export Error:', e);
                     alert('画像の出力に失敗しました。');
                 }
             });
 
-            // モーダル設定
-            setupModalClose('block-edit-modal', '#cancel-block-edit-btn');
-            const blockEditForm = document.getElementById('block-edit-form');
-            const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#64748B'];
-            const colorPicker = document.getElementById('color-picker');
-            const blockColorInput = document.getElementById('block-color');
-            colors.forEach(color => {
-                const colorCircle = document.createElement('div');
-                colorCircle.style.width = '30px';
-                colorCircle.style.height = '30px';
-                colorCircle.style.borderRadius = '50%';
-                colorCircle.style.backgroundColor = color;
-                colorCircle.style.cursor = 'pointer';
-                colorCircle.style.border = '3px solid transparent';
-                colorCircle.dataset.color = color;
-                if (color === blockColorInput.value) {
-                    colorCircle.style.borderColor = '#333';
-                }
-                colorCircle.addEventListener('click', () => {
-                    blockColorInput.value = color;
-                    Array.from(colorPicker.children).forEach(child => {
-                        child.style.borderColor = 'transparent';
-                    });
-                    colorCircle.style.borderColor = '#333';
-                });
-                colorPicker.appendChild(colorCircle);
-            });
-            blockEditForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const name = document.getElementById('block-name').value;
-                const startDate = document.getElementById('block-start-date').value;
-                const startTime = document.getElementById('block-start-time').value;
-                const endDate = document.getElementById('block-end-date').value;
-                const endTime = document.getElementById('block-end-time').value;
-                const color = document.getElementById('block-color').value;
-                if (!name || !startDate || !startTime || !endDate || !endTime) {
-                    alert('すべての日時を入力してください。');
-                    return;
-                }
-                const startISO = new Date(`${startDate}T${startTime}`).toISOString();
-                const endISO = new Date(`${endDate}T${endTime}`).toISOString();
-                if (new Date(endISO) <= new Date(startISO)) {
-                    alert('終了日時は開始日時より後に設定してください。');
-                    return;
-                }
-                const blockData = { name, startISO, endISO, color };
-                if (editingBlockId) {
-                    const index = projectBlocks.findIndex(b => b.id === editingBlockId);
-                    if (index !== -1) {
-                        projectBlocks[index] = { ...projectBlocks[index], ...blockData };
-                    }
-                } else {
-                    const newBlock = {
-                        ...blockData,
-                        id: Date.now().toString(),
-                        layoutRow: -1
-                    };
-                    newBlock.layoutRow = findAvailableRow(newBlock);
-                    projectBlocks.push(newBlock);
-                }
-                editingBlockId = null; 
-                saveToLocalStorage();
-                drawCanvas();
-                hideModal('block-edit-modal');
-            });
-
-            function openEditModal(block) {
-                editingBlockId = block.id; 
-                document.getElementById('block-modal-title').textContent = 'ブロック編集';
-                document.getElementById('block-id').value = block.id;
-                document.getElementById('block-name').value = block.name;
-                const start = new Date(block.startISO);
-                const end = new Date(block.endISO);
-                document.getElementById('block-start-date').value = start.toISOString().split('T')[0];
-                document.getElementById('block-start-time').value = start.toTimeString().substring(0, 5);
-                document.getElementById('block-end-date').value = end.toISOString().split('T')[0];
-                document.getElementById('block-end-time').value = end.toTimeString().substring(0, 5);
-                blockColorInput.value = block.color;
-                Array.from(colorPicker.children).forEach(child => {
-                    child.style.borderColor = (child.dataset.color === block.color) ? '#333' : 'transparent';
-                });
-                showModal('block-edit-modal');
-            }
-
-            canvas.addEventListener('mousedown', handleInputStart);
-            canvas.addEventListener('mousemove', handleInputMove);
-            canvas.addEventListener('mouseup', handleInputEnd);
-            canvas.addEventListener('mouseleave', handleInputEnd);
-            canvas.addEventListener('touchstart', handleInputStart, {passive: false});
-            canvas.addEventListener('touchmove', handleInputMove, {passive: false});
-            canvas.addEventListener('touchend', handleInputEnd);
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const loadedCsvData = sessionStorage.getItem('bloske_loaded_csv');
-            if (loadedCsvData) {
-                currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '読み込みプロジェクト';
-                projectBlocks = parseCsvData(loadedCsvData);
-                sessionStorage.removeItem('bloske_loaded_csv'); 
-                sessionStorage.removeItem('bloske_current_project_name');
-            } else if (urlParams.has('restore')) {
-                loadFromLocalStorage();
-            } else {
-                currentProjectName = sessionStorage.getItem('bloske_current_project_name') || '新規プロジェクト';
-                sessionStorage.removeItem('bloske_current_project_name');
-            }
-            projectNameEl.textContent = currentProjectName;
-            
-            drawCanvas(); 
-            window.addEventListener('resize', drawCanvas);
-
-            async function saveProjectData(username) {
-                const projectName = projectNameEl.textContent;
-                let csvData = "ブロック名,開始日時ISO,終了日時ISO,カラーコード\n"; 
-                projectBlocks.forEach(block => {
-                    const name = `"${block.name.replace(/"/g, '""')}"`;
-                    csvData += `${name},"${block.startISO}","${block.endISO}","${block.color}"\n`;
-                });
-                if (!confirm(`プロジェクト「${projectName}」を保存しますか？`)) {
-                    return;
-                }
-                try {
-                    await callGasApi('saveProject', {
-                        username: username,
-                        projectName: projectName,
-                        csvData: csvData
-                    });
-                    alert('保存しました。');
-                    localStorage.removeItem('bloske_local_project');
-                } catch (error) {
-                    console.error('保存失敗:', error);
-                }
-            }
+            // 初期描画
+            window.addEventListener('resize', requestRender);
+            requestRender();
         });
     </script>
 </body>
