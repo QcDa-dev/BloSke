@@ -4,144 +4,161 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保存データ一覧 - BloSke</title>
-    
-    <!-- アイコン設定 -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-    <!-- 共通スタイル -->
     <link rel="stylesheet" href="common.css">
-
-    <!-- Firebase SDKの読み込み (common.jsより前) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 </head>
-<body>
+<body class="pt-16 pb-16 bg-gray-50 flex flex-col min-h-screen">
 
-    <main>
-        <div class="container">
-            <h1>保存済みプロジェクト</h1>
-            
-            <!-- ユーザー情報 -->
-            <div id="user-info" class="user-info-bar">
-                <i class="fa-solid fa-user"></i>
-                <span id="username-display">読み込み中...</span>
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+        <div class="flex justify-between items-end mb-8 border-b border-gray-200 pb-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-gray-800">保存済みプロジェクト</h1>
+                <p class="text-gray-500 mt-2 text-sm"><i class="fa-solid fa-user mr-1"></i> <span id="username-display">読み込み中...</span></p>
             </div>
+            <button id="create-new-btn" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i><span class="hidden sm:inline"> 新規作成</span>
+            </button>
+        </div>
 
-            <!-- プロジェクト一覧 -->
-            <div id="projects-list-container" class="projects-list">
-                <!-- <div class="project-item">
-                    <span>プロジェクト名</span>
-                    <button class="btn btn-primary btn-sm"><i class="fa-solid fa-folder-open"></i> 読み込む</button>
-                </div> -->
-                <p id="loading-projects">プロジェクト一覧を読み込んでいます...</p>
+        <!-- プロジェクト一覧 -->
+        <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Loading Indicator -->
+            <div id="loading-projects" class="col-span-full py-12 text-center text-gray-500">
+                <i class="fa-solid fa-spinner fa-spin fa-2x mb-3 text-blue-500"></i>
+                <p>プロジェクト一覧を読み込んでいます...</p>
             </div>
+        </div>
 
-            <div style="margin-top: 30px; text-align: center;">
-                <button id="back-to-main-btn" class="btn btn-secondary">
-                    <i class="fa-solid fa-arrow-left"></i> メイン画面に戻る
-                </button>
-            </div>
+        <div class="mt-12 text-center">
+            <button id="back-to-main-btn" class="px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold rounded-lg shadow-sm transition-colors">
+                <i class="fa-solid fa-arrow-left mr-2"></i> メイン画面に戻る
+            </button>
         </div>
     </main>
 
-    <!-- 共通スクリプト -->
-    <script src="common.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // 共通UIを初期化
+    <script type="module">
+        import { initCommonUI, requireAuth, db, collection, getDocs, deleteDoc, doc, APP_ID, showLoading, hideLoading } from './common.js';
+
+        document.addEventListener('DOMContentLoaded', async () => {
             initCommonUI('BloSke');
             
-            // 認証ガード (未ログインならlogin.htmlへ)
-            const user = getUserSession();
-            if (!user) {
-                authGuard(); // (内部でlogin.htmlへリダイレクト)
-                return;
+            let currentUser;
+            try {
+                currentUser = await requireAuth();
+                document.getElementById('username-display').textContent = currentUser.displayName || currentUser.email;
+            } catch (e) {
+                return; // 認証失敗時はリダイレクトされる
             }
 
-            const usernameDisplay = document.getElementById('username-display');
-            const listContainer = document.getElementById('projects-list-container');
+            const gridContainer = document.getElementById('projects-grid');
             const loadingMsg = document.getElementById('loading-projects');
 
-            usernameDisplay.textContent = user.username; // ユーザー名を表示
-
-            // --- プロジェクト一覧の読み込み (仕様書 4.3) ---
+            // プロジェクトの読み込み
             async function loadProjects() {
                 try {
-                    const data = await callGasApi('listProjects', {
-                        username: user.username
-                    });
+                    // RULE 1: /artifacts/{appId}/users/{userId}/projects
+                    const projectsRef = collection(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'projects');
+                    const snapshot = await getDocs(projectsRef);
                     
-                    loadingMsg.style.display = 'none'; // ローディング非表示
+                    gridContainer.innerHTML = ''; // クリア
 
-                    if (data.projects && data.projects.length > 0) {
-                        data.projects.forEach(projectName => {
-                            const item = document.createElement('div');
-                            item.className = 'project-item';
-                            item.innerHTML = `
-                                <span>${escapeHTML(projectName)}</span>
-                                <button class="btn btn-primary btn-sm" data-project-name="${escapeHTML(projectName)}">
-                                    <i class="fa-solid fa-folder-open"></i> 読み込む
-                                </button>
-                            `;
-                            listContainer.appendChild(item);
-                        });
-                    } else {
-                        listContainer.innerHTML = '<p>保存されているプロジェクトはありません。</p>';
+                    if (snapshot.empty) {
+                        gridContainer.innerHTML = `
+                            <div class="col-span-full py-12 bg-white rounded-xl border border-dashed border-gray-300 text-center">
+                                <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                                    <i class="fa-regular fa-folder-open fa-2x"></i>
+                                </div>
+                                <p class="text-gray-600 font-medium">保存されているプロジェクトはありません。</p>
+                                <p class="text-gray-400 text-sm mt-1">右上の「新規作成」から作成してください。</p>
+                            </div>
+                        `;
+                        return;
                     }
 
+                    // メモリ内でソート (更新日時の降順)
+                    const projects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+                    projects.forEach(project => {
+                        const dateStr = project.updatedAt ? new Date(project.updatedAt).toLocaleDateString('ja-JP', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '日時不明';
+                        const blockCount = project.blocks ? project.blocks.length : 0;
+
+                        const card = document.createElement('div');
+                        card.className = 'bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-5 flex flex-col h-full';
+                        card.innerHTML = `
+                            <div class="flex-grow">
+                                <h3 class="text-xl font-bold text-gray-800 mb-1 truncate" title="${escapeHTML(project.name)}">${escapeHTML(project.name)}</h3>
+                                <p class="text-xs text-gray-400 mb-4"><i class="fa-regular fa-clock"></i> ${dateStr}</p>
+                                <div class="flex items-center gap-2 mb-4">
+                                    <span class="px-2.5 py-1 bg-blue-50 text-blue-600 text-xs font-semibold rounded-md">${blockCount} ブロック</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 mt-auto border-t border-gray-100 pt-4">
+                                <button class="load-btn flex-grow px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold rounded-lg transition-colors text-sm" data-id="${project.id}">
+                                    <i class="fa-solid fa-pen-to-square"></i> 編集
+                                </button>
+                                <button class="delete-btn px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors text-sm" data-id="${project.id}" data-name="${escapeHTML(project.name)}">
+                                    <i class="fa-regular fa-trash-can"></i>
+                                </button>
+                            </div>
+                        `;
+                        gridContainer.appendChild(card);
+                    });
+
+                    // イベントリスナーの付与
+                    document.querySelectorAll('.load-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const id = e.currentTarget.dataset.id;
+                            window.location.href = `edit.html?id=${id}`;
+                        });
+                    });
+
+                    document.querySelectorAll('.delete-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const id = e.currentTarget.dataset.id;
+                            const name = e.currentTarget.dataset.name;
+                            if (confirm(`プロジェクト「${name}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) {
+                                showLoading();
+                                try {
+                                    await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', currentUser.uid, 'projects', id));
+                                    await loadProjects(); // 再読み込み
+                                } catch (error) {
+                                    console.error("Delete Error", error);
+                                    alert("削除に失敗しました。");
+                                } finally {
+                                    hideLoading();
+                                }
+                            }
+                        });
+                    });
+
                 } catch (error) {
-                    loadingMsg.textContent = 'プロジェクト一覧の読み込みに失敗しました。';
-                    loadingMsg.style.color = 'red';
-                    console.error('プロジェクト一覧の読み込み失敗:', error);
+                    if (loadingMsg) {
+                        loadingMsg.innerHTML = '<p class="text-red-500 font-bold">プロジェクトの読み込みに失敗しました。</p>';
+                    }
+                    console.error('Fetch Projects Error:', error);
                 }
             }
 
             loadProjects();
 
-            // --- プロジェクト読み込み処理 (仕様書 4.3) ---
-            listContainer.addEventListener('click', async (e) => {
-                if (e.target.tagName === 'BUTTON' && e.target.dataset.projectName) {
-                    const projectName = e.target.dataset.projectName;
-                    
-                    if (!confirm(`「${projectName}」を読み込みますか？\n（現在編集中の内容は失われます）`)) {
-                        return;
-                    }
-
-                    try {
-                        const data = await callGasApi('loadProject', {
-                            username: user.username,
-                            projectName: projectName
-                        });
-                        
-                        // 読み込んだCSVデータをセッションストレージに保存
-                        sessionStorage.setItem('bloske_loaded_csv', data.csvData);
-                        sessionStorage.setItem('bloske_current_project_name', projectName);
-                        
-                        // 編集画面に遷移
-                        window.location.href = 'edit.html';
-
-                    } catch (error) {
-                         console.error('プロジェクトの読み込み失敗:', error);
-                    }
-                }
+            // 新規作成ボタン (edit.html へパラメータ無しで遷移)
+            document.getElementById('create-new-btn').addEventListener('click', () => {
+                sessionStorage.setItem('bloske_current_project_name', 'my project');
+                sessionStorage.removeItem('bloske_project_id');
+                window.location.href = 'edit.html';
             });
 
-            // メイン画面に戻る
             document.getElementById('back-to-main-btn').addEventListener('click', () => {
                 window.location.href = 'index.html';
             });
 
             function escapeHTML(str) {
+                if (!str) return '';
                 return str.replace(/[&<>"']/g, function(match) {
-                    return {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#39;'
-                    }[match];
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[match];
                 });
             }
         });
