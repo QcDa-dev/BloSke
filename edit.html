@@ -129,9 +129,10 @@
         let currentMinTime = 0;
         let cachedMinTime = 0; // ドラッグ中の時間軸固定用
         let cachedMaxTime = 0; // ドラッグ中の時間軸固定用
+        let currentPaddingX = 60; // 描画の横パディング（動的計算用）
 
         // --- UI Elements ---
-            const titleInput = document.getElementById('project-title');
+        const titleInput = document.getElementById('project-title');
             const statusDiv = document.getElementById('save-status');
             const canvas = document.getElementById('timetable-canvas');
             const ctx = canvas.getContext('2d');
@@ -312,7 +313,14 @@
 
                     const durationMins = (maxTime - minTime) / (1000 * 60);
                     const requiredWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
-                    if (requiredWidth > canvasWidth) canvasWidth = requiredWidth;
+                    
+                    if (requiredWidth > canvasWidth) {
+                        canvasWidth = requiredWidth;
+                        currentPaddingX = CONFIG.paddingX;
+                    } else {
+                        // 画面幅に余裕がある場合は中央寄せにする
+                        currentPaddingX = (canvasWidth - (durationMins * CONFIG.pixelsPerMinute)) / 2;
+                    }
 
                     // 行数の計算（高さ調整用：ユーザーが指定したrowの最大値を取得）
                     if (projectState.blocks.length > 0) {
@@ -380,8 +388,8 @@
 
                 // --- 時間軸と背景グリッドの描画 ---
                 ctx.beginPath();
-                ctx.moveTo(CONFIG.paddingX, CONFIG.timelineHeight);
-                ctx.lineTo(canvas.width - CONFIG.paddingX, CONFIG.timelineHeight);
+                ctx.moveTo(currentPaddingX, CONFIG.timelineHeight);
+                ctx.lineTo(canvas.width - currentPaddingX, CONFIG.timelineHeight);
                 ctx.strokeStyle = '#CBD5E1';
                 ctx.lineWidth = 2;
                 ctx.stroke();
@@ -389,7 +397,7 @@
                 // 30分刻みの縦線と時刻
                 const totalMinutes = (maxTime - minTime) / (1000 * 60);
                 for (let m = 0; m <= totalMinutes; m += 30) {
-                    const x = CONFIG.paddingX + m * CONFIG.pixelsPerMinute;
+                    const x = currentPaddingX + m * CONFIG.pixelsPerMinute;
                     
                     // 縦線
                     ctx.beginPath();
@@ -420,17 +428,17 @@
                 ctx.fillStyle = '#334155';
                 ctx.font = 'bold 14px Inter';
                 ctx.textAlign = 'left';
-                ctx.fillText(startDateStr, 10, 20);
+                ctx.fillText(startDateStr, currentPaddingX, 20);
                 ctx.textAlign = 'right';
-                ctx.fillText(endDateStr, canvas.width - 10, 20);
+                ctx.fillText(endDateStr, canvas.width - currentPaddingX, 20);
 
                 // --- ブロックの描画 ---
                 projectState.blocks.forEach(b => {
                     const st = new Date(b.startTime).getTime();
                     const et = new Date(b.endTime).getTime();
                     
-                    const startX = CONFIG.paddingX + ((st - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
-                    const endX = CONFIG.paddingX + ((et - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
+                    const startX = currentPaddingX + ((st - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
+                    const endX = currentPaddingX + ((et - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
                     const width = endX - startX;
                     
                     const row = b.row || 0;
@@ -533,7 +541,7 @@
                 const newY = pos.y - dragOffsetY;
                 
                 // X座標から新しい開始時間を計算し、5分単位にスナップ
-                let offsetMins = (newStartX - CONFIG.paddingX) / CONFIG.pixelsPerMinute;
+                let offsetMins = (newStartX - currentPaddingX) / CONFIG.pixelsPerMinute;
                 offsetMins = Math.round(offsetMins / 5) * 5; // 5分の倍数に丸める
                 
                 const newStartTime = new Date(currentMinTime + offsetMins * 60 * 1000);
@@ -684,24 +692,26 @@
                 
                 // ロゴ表示用の透過背景ボックス
                 tCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                tCtx.fillRect(canvas.width - 250, canvas.height - 60, 250, 60);
+                tCtx.fillRect(canvas.width - 250, canvas.height - 80, 250, 80);
 
                 // アイコン画像の読み込みと描画
                 const logoImg = new Image();
                 logoImg.onload = () => {
-                    const iconSize = 28;
-                    const iconX = canvas.width - 230;
-                    const iconY = canvas.height - 46;
+                    // ロゴ画像のアスペクト比を保って適切にリサイズ（幅最大200px、高さ最大45pxに収める）
+                    const maxIconWidth = 200;
+                    const maxIconHeight = 45;
+                    const ratio = Math.min(maxIconWidth / logoImg.width, maxIconHeight / logoImg.height);
+                    const iconW = logoImg.width * ratio;
+                    const iconH = logoImg.height * ratio;
                     
-                    // アイコンを描画
-                    tCtx.drawImage(logoImg, iconX, iconY, iconSize, iconSize);
+                    const iconX = canvas.width - iconW - 20;
+                    const iconY = canvas.height - iconH - 25; // コピーライトの上に配置
+                    
+                    // アイコン（ロゴ）をデカデカと描画
+                    tCtx.drawImage(logoImg, iconX, iconY, iconW, iconH);
 
-                    // アプリ名（ロゴの右）
-                    // tCtx.fillStyle = '#3B82F6'; // QcDaブルー
-                    // tCtx.font = 'bold 24px Inter';
-                    // tCtx.textAlign = 'left';
-                    // tCtx.fillText('BloSke', iconX + iconSize + 10, canvas.height - 25);
-                    
+                    // ロゴが表示できた場合は「BloSke」のテキストは表示しない
+
                     // コピーライト
                     tCtx.fillStyle = '#64748B'; // slate-500
                     tCtx.font = '12px Inter';
