@@ -429,8 +429,12 @@
                 ctx.font = 'bold 14px Inter';
                 ctx.textAlign = 'left';
                 ctx.fillText(startDateStr, currentPaddingX, 20);
-                ctx.textAlign = 'right';
-                ctx.fillText(endDateStr, canvas.width - currentPaddingX, 20);
+                
+                // 開始日と終了日が異なる場合のみ右端にも日付を表示
+                if (startDateStr !== endDateStr) {
+                    ctx.textAlign = 'right';
+                    ctx.fillText(endDateStr, canvas.width - currentPaddingX, 20);
+                }
 
                 // --- ブロックの描画 ---
                 projectState.blocks.forEach(b => {
@@ -678,6 +682,16 @@
                     return;
                 }
 
+                // --- 出力用ファイル名の生成 ---
+                const now = new Date();
+                const yy = String(now.getFullYear()).slice(-2);
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const hh = String(now.getHours()).padStart(2, '0');
+                const min = String(now.getMinutes()).padStart(2, '0');
+                const timeSuffix = `${yy}${mm}${dd}${hh}${min}`;
+                const fileName = `${projectState.projectName}-${timeSuffix}.png`;
+
                 // --- 1. 現在の表示状態をバックアップ ---
                 const backupWidth = canvas.width;
                 const backupHeight = canvas.height;
@@ -725,7 +739,7 @@
 
                 // --- 4. tempCanvasに高解像度で転写 ---
                 const tempCanvas = document.createElement('canvas');
-                const scale = 2; // 高画質化
+                const scale = 4; // 2から4へ変更し、さらに高画質化
                 tempCanvas.width = exportWidth * scale;
                 tempCanvas.height = exportHeight * scale;
                 const tCtx = tempCanvas.getContext('2d');
@@ -777,7 +791,7 @@
 
                     // ダウンロード処理
                     const link = document.createElement('a');
-                    link.download = `${projectState.projectName}.png`;
+                    link.download = fileName;
                     link.href = tempCanvas.toDataURL('image/png', 1.0);
                     link.click();
                 };
@@ -795,7 +809,7 @@
                     tCtx.fillText('Created by QcDa Project', exportWidth - 20, exportHeight - 10);
 
                     const link = document.createElement('a');
-                    link.download = `${projectState.projectName}.png`;
+                    link.download = fileName;
                     link.href = tempCanvas.toDataURL('image/png', 1.0);
                     link.click();
                 };
