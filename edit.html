@@ -127,6 +127,8 @@
         let dragOffsetY = 0;
         let blockRenderData = []; // 描画時の座標データ { block, x, y, w, h }
         let currentMinTime = 0;
+        let cachedMinTime = 0; // ドラッグ中の時間軸固定用
+        let cachedMaxTime = 0; // ドラッグ中の時間軸固定用
 
         // --- UI Elements ---
             const titleInput = document.getElementById('project-title');
@@ -304,6 +306,10 @@
                     drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
                     maxTime = drawMaxTime.getTime();
 
+                    // リサイズ時にもキャッシュを更新しておく
+                    cachedMinTime = minTime;
+                    cachedMaxTime = maxTime;
+
                     const durationMins = (maxTime - minTime) / (1000 * 60);
                     const requiredWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
                     if (requiredWidth > canvasWidth) canvasWidth = requiredWidth;
@@ -337,28 +343,38 @@
                     return;
                 }
 
-                // 時間軸の計算
-                let minTime = Infinity;
-                let maxTime = -Infinity;
-                projectState.blocks.forEach(b => {
-                    const t1 = new Date(b.startTime).getTime();
-                    const t2 = new Date(b.endTime).getTime();
-                    if(t1 < minTime) minTime = t1;
-                    if(t2 > maxTime) maxTime = t2;
-                });
+                let minTime, maxTime;
 
-                // 余白（前後30分）
-                minTime -= 30 * 60 * 1000;
-                maxTime += 30 * 60 * 1000;
-                
-                // 30分単位でキリの良い時刻に切り下げ/切り上げ
-                let drawMinTime = new Date(minTime);
-                drawMinTime.setMinutes(drawMinTime.getMinutes() < 30 ? 0 : 30, 0, 0);
-                minTime = drawMinTime.getTime();
+                // ドラッグ中（操作中）は時間軸のスケールを固定してズレを防ぐ
+                if (!isDragging || cachedMinTime === 0) {
+                    minTime = Infinity;
+                    maxTime = -Infinity;
+                    projectState.blocks.forEach(b => {
+                        const t1 = new Date(b.startTime).getTime();
+                        const t2 = new Date(b.endTime).getTime();
+                        if(t1 < minTime) minTime = t1;
+                        if(t2 > maxTime) maxTime = t2;
+                    });
 
-                let drawMaxTime = new Date(maxTime);
-                drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
-                maxTime = drawMaxTime.getTime();
+                    // 余白（前後30分）
+                    minTime -= 30 * 60 * 1000;
+                    maxTime += 30 * 60 * 1000;
+                    
+                    // 30分単位でキリの良い時刻に切り下げ/切り上げ
+                    let drawMinTime = new Date(minTime);
+                    drawMinTime.setMinutes(drawMinTime.getMinutes() < 30 ? 0 : 30, 0, 0);
+                    minTime = drawMinTime.getTime();
+
+                    let drawMaxTime = new Date(maxTime);
+                    drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
+                    maxTime = drawMaxTime.getTime();
+
+                    cachedMinTime = minTime;
+                    cachedMaxTime = maxTime;
+                } else {
+                    minTime = cachedMinTime;
+                    maxTime = cachedMaxTime;
+                }
 
                 currentMinTime = minTime; // ドラッグ計算用に保持
 
@@ -668,22 +684,57 @@
                 
                 // ロゴ表示用の透過背景ボックス
                 tCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                tCtx.fillRect(canvas.width - 220, canvas.height - 60, 220, 60);
+                tCtx.fillRect(canvas.width - 250, canvas.height - 60, 250, 60);
 
-                // アプリ名（ロゴ）とウォーターマーク
-                tCtx.fillStyle = '#3B82F6'; // QcDaブルー
-                tCtx.font = 'bold 24px Inter';
-                tCtx.textAlign = 'right';
-                tCtx.fillText('BloSke', canvas.width - 20, canvas.height - 30);
+                // アイコン画像の読み込みと描画
+                const logoImg = new Image();
+                logoImg.onload = () => {
+                    const iconSize = 28;
+                    const iconX = canvas.width - 230;
+                    const iconY = canvas.height - 46;
+                    
+                    // アイコンを描画
+                    tCtx.drawImage(logoImg, iconX, iconY, iconSize, iconSize);
+
+                    // アプリ名（ロゴの右）
+                    // tCtx.fillStyle = '#3B82F6'; // QcDaブルー
+                    // tCtx.font = 'bold 24px Inter';
+                    // tCtx.textAlign = 'left';
+                    // tCtx.fillText('BloSke', iconX + iconSize + 10, canvas.height - 25);
+                    
+                    // コピーライト
+                    tCtx.fillStyle = '#64748B'; // slate-500
+                    tCtx.font = '12px Inter';
+                    tCtx.textAlign = 'right';
+                    tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
+
+                    // ダウンロード処理
+                    const link = document.createElement('a');
+                    link.download = `${projectState.projectName}.png`;
+                    link.href = tempCanvas.toDataURL('image/png', 1.0);
+                    link.click();
+                };
+
+                logoImg.onerror = () => {
+                    // 画像の読み込みに失敗した場合のフォールバック（テキストのみ）
+                    tCtx.fillStyle = '#3B82F6'; // QcDaブルー
+                    tCtx.font = 'bold 24px Inter';
+                    tCtx.textAlign = 'right';
+                    tCtx.fillText('BloSke', canvas.width - 20, canvas.height - 30);
+                    
+                    tCtx.fillStyle = '#64748B'; // slate-500
+                    tCtx.font = '12px Inter';
+                    tCtx.textAlign = 'right';
+                    tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
+
+                    const link = document.createElement('a');
+                    link.download = `${projectState.projectName}.png`;
+                    link.href = tempCanvas.toDataURL('image/png', 1.0);
+                    link.click();
+                };
                 
-                tCtx.fillStyle = '#64748B'; // slate-500
-                tCtx.font = '12px Inter';
-                tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
-
-                const link = document.createElement('a');
-                link.download = `${projectState.projectName}.png`;
-                link.href = tempCanvas.toDataURL('image/png', 1.0);
-                link.click();
+                // 同じディレクトリにあるSVGアイコンを指定
+                logoImg.src = 'icon.svg'; 
             });
 
             // Init resize
