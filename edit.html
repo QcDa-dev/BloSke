@@ -673,11 +673,61 @@
             });
 
             document.getElementById('btn-download').addEventListener('click', () => {
-                // 解像度を2倍にして出力（いい感じの縮尺・高画質化）
+                if (!projectState.blocks || projectState.blocks.length === 0) {
+                    alert('イベントがありません。');
+                    return;
+                }
+
+                // --- 1. 現在の表示状態をバックアップ ---
+                const backupWidth = canvas.width;
+                const backupHeight = canvas.height;
+                const backupPaddingX = currentPaddingX;
+
+                // --- 2. 出力用の最適サイズ計算（余白を切り詰める） ---
+                let minTime = Infinity;
+                let maxTime = -Infinity;
+                projectState.blocks.forEach(b => {
+                    const t1 = new Date(b.startTime).getTime();
+                    const t2 = new Date(b.endTime).getTime();
+                    if(t1 < minTime) minTime = t1;
+                    if(t2 > maxTime) maxTime = t2;
+                });
+
+                minTime -= 30 * 60 * 1000;
+                maxTime += 30 * 60 * 1000;
+                let drawMinTime = new Date(minTime);
+                drawMinTime.setMinutes(drawMinTime.getMinutes() < 30 ? 0 : 30, 0, 0);
+                minTime = drawMinTime.getTime();
+
+                let drawMaxTime = new Date(maxTime);
+                drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
+                maxTime = drawMaxTime.getTime();
+
+                const durationMins = (maxTime - minTime) / (1000 * 60);
+                // 画像出力時は中央寄せをやめ、最小パディング(CONFIG.paddingX)に固定して幅を切り詰める
+                let exportWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
+                
+                const maxRow = projectState.blocks.length > 0 ? Math.max(...projectState.blocks.map(b => b.row || 0)) + 1 : 0;
+                let exportHeight = CONFIG.timelineHeight + CONFIG.paddingY + maxRow * (CONFIG.rowHeight + 10) + 80; 
+
+                if (exportWidth < 400) exportWidth = 400; // 最低幅
+
+                // --- 3. 一時的なCanvas変形と描画 ---
+                canvas.width = exportWidth;
+                canvas.height = exportHeight;
+                currentPaddingX = CONFIG.paddingX; // パディングを固定値に
+                
+                // 一時的にキャッシュをクリアして描画範囲を強制適用
+                const backupCachedMin = cachedMinTime;
+                const backupCachedMax = cachedMaxTime;
+                cachedMinTime = 0;
+                drawCanvas(); 
+
+                // --- 4. tempCanvasに高解像度で転写 ---
                 const tempCanvas = document.createElement('canvas');
-                const scale = 2;
-                tempCanvas.width = canvas.width * scale;
-                tempCanvas.height = canvas.height * scale;
+                const scale = 2; // 高画質化
+                tempCanvas.width = exportWidth * scale;
+                tempCanvas.height = exportHeight * scale;
                 const tCtx = tempCanvas.getContext('2d');
                 
                 // スケール適用
@@ -685,38 +735,45 @@
 
                 // 背景を白で塗りつぶし
                 tCtx.fillStyle = '#FFFFFF';
-                tCtx.fillRect(0, 0, canvas.width, canvas.height);
+                tCtx.fillRect(0, 0, exportWidth, exportHeight);
                 
-                // 元のCanvas内容を描画
+                // 最適化されたCanvas内容を描画
                 tCtx.drawImage(canvas, 0, 0);
+
+                // --- 5. 画面の復元（チラつきを最小限に） ---
+                canvas.width = backupWidth;
+                canvas.height = backupHeight;
+                currentPaddingX = backupPaddingX;
+                cachedMinTime = backupCachedMin;
+                cachedMaxTime = backupCachedMax;
+                drawCanvas();
                 
+                // --- 6. ロゴとウォーターマーク描画（tempCanvasに対して） ---
                 // ロゴ表示用の透過背景ボックス
                 tCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                tCtx.fillRect(canvas.width - 250, canvas.height - 80, 250, 80);
+                tCtx.fillRect(exportWidth - 250, exportHeight - 80, 250, 80);
 
                 // アイコン画像の読み込みと描画
                 const logoImg = new Image();
                 logoImg.onload = () => {
-                    // ロゴ画像のアスペクト比を保って適切にリサイズ（幅最大200px、高さ最大45pxに収める）
+                    // ロゴ画像のアスペクト比を保って適切にリサイズ
                     const maxIconWidth = 200;
                     const maxIconHeight = 45;
                     const ratio = Math.min(maxIconWidth / logoImg.width, maxIconHeight / logoImg.height);
                     const iconW = logoImg.width * ratio;
                     const iconH = logoImg.height * ratio;
                     
-                    const iconX = canvas.width - iconW - 20;
-                    const iconY = canvas.height - iconH - 25; // コピーライトの上に配置
+                    const iconX = exportWidth - iconW - 20;
+                    const iconY = exportHeight - iconH - 25; // コピーライトの上に配置
                     
                     // アイコン（ロゴ）をデカデカと描画
                     tCtx.drawImage(logoImg, iconX, iconY, iconW, iconH);
-
-                    // ロゴが表示できた場合は「BloSke」のテキストは表示しない
 
                     // コピーライト
                     tCtx.fillStyle = '#64748B'; // slate-500
                     tCtx.font = '12px Inter';
                     tCtx.textAlign = 'right';
-                    tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
+                    tCtx.fillText('Created by QcDa Project', exportWidth - 20, exportHeight - 10);
 
                     // ダウンロード処理
                     const link = document.createElement('a');
@@ -726,16 +783,16 @@
                 };
 
                 logoImg.onerror = () => {
-                    // 画像の読み込みに失敗した場合のフォールバック（テキストのみ）
+                    // 画像の読み込みに失敗した場合のフォールバック
                     tCtx.fillStyle = '#3B82F6'; // QcDaブルー
                     tCtx.font = 'bold 24px Inter';
                     tCtx.textAlign = 'right';
-                    tCtx.fillText('BloSke', canvas.width - 20, canvas.height - 30);
+                    tCtx.fillText('BloSke', exportWidth - 20, exportHeight - 30);
                     
                     tCtx.fillStyle = '#64748B'; // slate-500
                     tCtx.font = '12px Inter';
                     tCtx.textAlign = 'right';
-                    tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
+                    tCtx.fillText('Created by QcDa Project', exportWidth - 20, exportHeight - 10);
 
                     const link = document.createElement('a');
                     link.download = `${projectState.projectName}.png`;
