@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タイムテーブル編集 - BloSke | QcDa Project</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="common.css">
+    <style>
+        #canvas-container {
+            width: 100%;
+            overflow-x: auto; /* 横スクロール対応 */
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            touch-action: none; /* スマホでのデフォルトスクロール無効化（Canvas操作のため） */
+        }
+        canvas {
+            display: block;
+            min-width: 800px; /* 最小幅を確保 */
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <main class="flex flex-col h-[calc(100vh-4rem-3.5rem)]"> <!-- ヘッダーとフッター分を引く -->
+        
+        <!-- ツールバー -->
+        <div class="bg-white border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-2 flex-grow">
+                <input type="text" id="project-title" class="text-xl font-bold text-slate-800 border-none bg-transparent hover:bg-slate-100 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full max-w-sm" value="無題のプロジェクト">
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-add" class="btn btn-primary py-1.5 px-3 text-sm flex gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    ブロック追加
+                </button>
+                <button id="btn-edit-mode" class="btn btn-secondary py-1.5 px-3 text-sm flex gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                    編集モード
+                </button>
+                <button id="btn-save" class="btn btn-outline py-1.5 px-3 text-sm flex gap-1 bg-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    保存
+                </button>
+                <button id="btn-download" class="btn btn-secondary py-1.5 px-3 text-sm" title="画像出力">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+                <button id="btn-reset" class="btn btn-danger py-1.5 px-3 text-sm" title="リセット">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- ワークスペース -->
+        <div class="flex-grow p-4 overflow-hidden flex flex-col">
+            <div id="save-status" class="text-xs text-slate-400 mb-2 text-right h-4"></div>
+            <div id="canvas-container" class="flex-grow relative shadow-sm">
+                <canvas id="timetable-canvas"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <!-- ブロック編集モーダル -->
+    <div id="block-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <h3 id="block-modal-title" class="text-xl font-bold mb-4">ブロックの追加</h3>
+            <form id="block-form">
+                <input type="hidden" id="block-id">
+                
+                <label class="block text-sm font-medium text-slate-700 mb-1">ブロック名</label>
+                <input type="text" id="block-title" class="form-input" required>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">開始日時</label>
+                        <input type="datetime-local" id="block-start" class="form-input" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">終了日時</label>
+                        <input type="datetime-local" id="block-end" class="form-input" required>
+                    </div>
+                </div>
+                
+                <label class="block text-sm font-medium text-slate-700 mb-1">カラー</label>
+                <div class="flex gap-2 mb-4">
+                    <!-- デフォルトパレット -->
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#3B82F6" class="hidden peer" checked><div class="w-8 h-8 rounded-full bg-blue-500 ring-offset-2 peer-checked:ring-2 ring-blue-500"></div></label>
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#10B981" class="hidden peer"><div class="w-8 h-8 rounded-full bg-emerald-500 ring-offset-2 peer-checked:ring-2 ring-emerald-500"></div></label>
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#F59E0B" class="hidden peer"><div class="w-8 h-8 rounded-full bg-amber-500 ring-offset-2 peer-checked:ring-2 ring-amber-500"></div></label>
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#EF4444" class="hidden peer"><div class="w-8 h-8 rounded-full bg-red-500 ring-offset-2 peer-checked:ring-2 ring-red-500"></div></label>
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#8B5CF6" class="hidden peer"><div class="w-8 h-8 rounded-full bg-violet-500 ring-offset-2 peer-checked:ring-2 ring-violet-500"></div></label>
+                    <label class="cursor-pointer"><input type="radio" name="bColor" value="#64748B" class="hidden peer"><div class="w-8 h-8 rounded-full bg-slate-500 ring-offset-2 peer-checked:ring-2 ring-slate-500"></div></label>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6 border-t border-slate-100 pt-4">
+                    <button type="button" id="btn-modal-cancel" class="btn btn-secondary">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">決定</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initCommonUI, auth, db, getQueryParam } from './common.js';
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCommonUI();
+
+            // --- State ---
+            let projectState = {
+                id: getQueryParam('id') || null,
+                projectName: getQueryParam('name') || "無題のプロジェクト",
+                blocks: []
+            };
+            let currentUser = null;
+            let isEditMode = false;
+            
+            // --- UI Elements ---
+            const titleInput = document.getElementById('project-title');
+            const statusDiv = document.getElementById('save-status');
+            const canvas = document.getElementById('timetable-canvas');
+            const ctx = canvas.getContext('2d');
+            const container = document.getElementById('canvas-container');
+            const modal = document.getElementById('block-modal');
+            const form = document.getElementById('block-form');
+
+            titleInput.value = projectState.projectName;
+
+            // --- Canvas Settings ---
+            const CONFIG = {
+                rowHeight: 60,
+                timelineHeight: 40,
+                pixelsPerMinute: 2, // 1分あたりのピクセル幅
+                paddingX: 50,
+                paddingY: 20
+            };
+
+            // --- Helper: Local Storage ---
+            const saveLocal = () => {
+                projectState.projectName = titleInput.value;
+                localStorage.setItem('bloske_local_project', JSON.stringify(projectState));
+                statusDiv.textContent = 'ローカルに自動保存しました ' + new Date().toLocaleTimeString();
+                drawCanvas();
+            };
+
+            const loadLocal = () => {
+                const data = localStorage.getItem('bloske_local_project');
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    // Firestoreからロードする場合と競合しないようIDがない場合のみ
+                    if (!projectState.id || parsed.id === projectState.id) {
+                        projectState = parsed;
+                        titleInput.value = projectState.projectName;
+                    }
+                }
+            };
+
+            // --- Firebase Load/Save ---
+            onAuthStateChanged(auth, async (user) => {
+                currentUser = user;
+                if (projectState.id && user) {
+                    try {
+                        const docRef = doc(db, "projects", projectState.id);
+                        const docSnap = await getDoc(docRef);
+                        if (docSnap.exists() && docSnap.data().userId === user.uid) {
+                            projectState = { id: docSnap.id, ...docSnap.data() };
+                            titleInput.value = projectState.projectName;
+                            drawCanvas();
+                        } else {
+                            alert("データが見つからないか、アクセス権がありません。");
+                            window.location.href = 'projects.html';
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                } else if (!projectState.id) {
+                    loadLocal(); // 新規の場合はローカル復元試行
+                    drawCanvas();
+                } else {
+                    // ID付きURLだが未ログイン
+                    alert("データを読み込むにはログインが必要です。");
+                    window.location.href = 'login.html';
+                }
+            });
+
+            document.getElementById('btn-save').addEventListener('click', async () => {
+                if (!currentUser) {
+                    saveLocal();
+                    alert("サーバーに保存するにはログインが必要です。ログイン画面へ移動します。");
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                statusDiv.textContent = '保存中...';
+                projectState.projectName = titleInput.value;
+
+                try {
+                    const dataToSave = {
+                        userId: currentUser.uid,
+                        projectName: projectState.projectName,
+                        blocks: projectState.blocks,
+                        updatedAt: serverTimestamp()
+                    };
+
+                    if (projectState.id) {
+                        await updateDoc(doc(db, "projects", projectState.id), dataToSave);
+                    } else {
+                        dataToSave.createdAt = serverTimestamp();
+                        const newDocRef = doc(collection(db, "projects"));
+                        await setDoc(newDocRef, dataToSave);
+                        projectState.id = newDocRef.id;
+                        // URL更新
+                        window.history.replaceState(null, '', `edit.html?id=${projectState.id}`);
+                    }
+                    statusDiv.textContent = 'クラウドに保存しました ' + new Date().toLocaleTimeString();
+                    localStorage.removeItem('bloske_local_project'); // クラウド保存成功でローカルクリア
+                } catch (e) {
+                    console.error("Save error:", e);
+                    statusDiv.textContent = '保存エラー';
+                    alert("保存に失敗しました。権限を確認してください。");
+                }
+            });
+
+            titleInput.addEventListener('change', saveLocal);
+
+            // --- Canvas Drawing Logic ---
+            const resizeCanvas = () => {
+                // コンテナの幅に合わせて、最低限必要な幅を計算
+                let minTime = Infinity;
+                let maxTime = -Infinity;
+                
+                projectState.blocks.forEach(b => {
+                    const t1 = new Date(b.startTime).getTime();
+                    const t2 = new Date(b.endTime).getTime();
+                    if(t1 < minTime) minTime = t1;
+                    if(t2 > maxTime) maxTime = t2;
+                });
+
+                let canvasWidth = container.clientWidth;
+                if (minTime !== Infinity && maxTime !== -Infinity) {
+                    const durationMins = (maxTime - minTime) / (1000 * 60);
+                    const requiredWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
+                    if (requiredWidth > canvasWidth) canvasWidth = requiredWidth;
+                }
+
+                canvas.width = canvasWidth;
+                canvas.height = container.clientHeight - 10; // offset
+                drawCanvas();
+            };
+            window.addEventListener('resize', resizeCanvas);
+
+            const drawCanvas = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (!projectState.blocks || projectState.blocks.length === 0) {
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '16px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('イベントが1つも登録されていません。', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+
+                // 時間軸の計算
+                let minTime = Infinity;
+                let maxTime = -Infinity;
+                projectState.blocks.forEach(b => {
+                    const t1 = new Date(b.startTime).getTime();
+                    const t2 = new Date(b.endTime).getTime();
+                    if(t1 < minTime) minTime = t1;
+                    if(t2 > maxTime) maxTime = t2;
+                });
+
+                // 余白（前後30分）
+                minTime -= 30 * 60 * 1000;
+                maxTime += 30 * 60 * 1000;
+
+                // 時間軸の描画
+                ctx.beginPath();
+                ctx.moveTo(CONFIG.paddingX, CONFIG.timelineHeight);
+                ctx.lineTo(canvas.width - CONFIG.paddingX, CONFIG.timelineHeight);
+                ctx.strokeStyle = '#CBD5E1';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // ブロックの描画（簡易版：行の重複回避ロジックは簡略化してY座標をずらす）
+                let row = 0;
+                projectState.blocks.forEach(b => {
+                    const st = new Date(b.startTime).getTime();
+                    const et = new Date(b.endTime).getTime();
+                    
+                    const startX = CONFIG.paddingX + ((st - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
+                    const endX = CONFIG.paddingX + ((et - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
+                    const width = endX - startX;
+                    const y = CONFIG.timelineHeight + CONFIG.paddingY + (row * (CONFIG.rowHeight + 10));
+
+                    // 矩形
+                    ctx.fillStyle = b.color || '#3B82F6';
+                    ctx.globalAlpha = 0.8;
+                    ctx.beginPath();
+                    ctx.roundRect(startX, y, width, CONFIG.rowHeight, 6);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+
+                    // テキスト
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = 'bold 12px Inter';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(b.title, startX + 5, y + 20);
+
+                    const stStr = new Date(st).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const etStr = new Date(et).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    ctx.font = '10px Inter';
+                    ctx.fillText(`${stStr} - ${etStr}`, startX + 5, y + 40);
+
+                    // 編集モードUI (削除ボタン相当のバツ印)
+                    if (isEditMode) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                        ctx.beginPath();
+                        ctx.arc(endX - 10, y + 10, 8, 0, Math.PI*2);
+                        ctx.fill();
+                        ctx.fillStyle = '#EF4444';
+                        ctx.font = 'bold 10px Inter';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('X', endX - 10, y + 13);
+                    }
+
+                    row++; // 本当は重複チェックして行を決めるが今回は簡略化
+                });
+            };
+
+            // --- Interaction ---
+            document.getElementById('btn-edit-mode').addEventListener('click', (e) => {
+                isEditMode = !isEditMode;
+                e.currentTarget.classList.toggle('btn-primary');
+                e.currentTarget.classList.toggle('btn-secondary');
+                drawCanvas();
+            });
+
+            document.getElementById('btn-add').addEventListener('click', () => {
+                form.reset();
+                document.getElementById('block-id').value = '';
+                document.getElementById('block-modal-title').textContent = 'ブロックの追加';
+                // 現在時刻をデフォルトに
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.getElementById('block-start').value = now.toISOString().slice(0,16);
+                now.setHours(now.getHours() + 1);
+                document.getElementById('block-end').value = now.toISOString().slice(0,16);
+                
+                modal.classList.add('show');
+            });
+
+            document.getElementById('btn-modal-cancel').addEventListener('click', () => {
+                modal.classList.remove('show');
+            });
+
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('block-id').value || crypto.randomUUID();
+                const title = document.getElementById('block-title').value;
+                const startTime = document.getElementById('block-start').value;
+                const endTime = document.getElementById('block-end').value;
+                const color = document.querySelector('input[name="bColor"]:checked').value;
+
+                if (new Date(startTime) >= new Date(endTime)) {
+                    alert('終了日時は開始日時より後に設定してください。');
+                    return;
+                }
+
+                const newBlock = { id, title, startTime, endTime, color };
+
+                const existingIdx = projectState.blocks.findIndex(b => b.id === id);
+                if (existingIdx >= 0) {
+                    projectState.blocks[existingIdx] = newBlock;
+                } else {
+                    projectState.blocks.push(newBlock);
+                }
+
+                modal.classList.remove('show');
+                saveLocal();
+                resizeCanvas(); // 追加で領域が広がる可能性考慮
+            });
+
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                if(confirm('プロジェクトをリセットします。よろしいですか？')) {
+                    projectState.blocks = [];
+                    saveLocal();
+                }
+            });
+
+            document.getElementById('btn-download').addEventListener('click', () => {
+                // 背景を白にして保存
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tCtx = tempCanvas.getContext('2d');
+                tCtx.fillStyle = '#FFFFFF';
+                tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tCtx.drawImage(canvas, 0, 0);
+                
+                // ウォーターマーク
+                tCtx.fillStyle = '#94A3B8';
+                tCtx.font = '12px Inter';
+                tCtx.fillText('Created by BloSke', 10, 15);
+
+                const link = document.createElement('a');
+                link.download = `${projectState.projectName}.png`;
+                link.href = tempCanvas.toDataURL('image/png');
+                link.click();
+            });
+
+            // Init resize
+            setTimeout(resizeCanvas, 100);
+        });
+    </script>
+</body>
+</html>
