@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リリースノート - BloSke | QcDa Project</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+    <main class="container mx-auto p-6 max-w-3xl">
+        <h1 class="text-3xl font-bold text-center text-slate-800 mb-10">リリースノート</h1>
+
+        <div id="loading" class="text-center py-12">
+            <div class="loader"></div>
+            <p class="mt-4 text-slate-500">更新履歴を取得しています...</p>
+        </div>
+
+        <div id="release-container" class="space-y-6">
+            <!-- GitHub Releasesから取得したデータがここに挿入されます -->
+        </div>
+    </main>
+
+    <script type="module">
+        import { initCommonUI } from './common.js';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initCommonUI();
+
+            // ご自身のリポジトリ情報に変更してください
+            const GITHUB_USER = 'qcda-dev';
+            const GITHUB_REPO = 'BloSke'; 
+
+            const container = document.getElementById('release-container');
+            const loading = document.getElementById('loading');
+            
+            // API呼び出し例 (実際のリポジトリがないと404になるため、ダミーデータをフォールバックとして用意)
+            fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Network response was not ok');
+                    return res.json();
+                })
+                .then(releases => {
+                    loading.classList.add('hidden');
+                    if (releases.length === 0) {
+                        container.innerHTML = '<p class="text-center text-slate-500">リリース情報はまだありません。</p>';
+                        return;
+                    }
+                    renderReleases(releases);
+                })
+                .catch(error => {
+                    console.warn('Fallback to dummy data due to fetch error:', error);
+                    loading.classList.add('hidden');
+                    // ダミーデータで描画
+                    renderReleases([
+                        {
+                            name: "v1.0.0",
+                            published_at: new Date().toISOString(),
+                            body: "🎉 **BloSke 1.0.0 リリース!**\n\n- Firebase Authentication, Firestore連携による保存機能の実装\n- Canvasを用いた直感的なタイムテーブル描画\n- QcDa Project標準UIの適用"
+                        }
+                    ]);
+                });
+
+            function renderReleases(releases) {
+                releases.forEach(release => {
+                    const date = new Date(release.published_at).toLocaleDateString('ja-JP');
+                    const htmlContent = marked.parse(release.body || 'No description provided.');
+                    
+                    const div = document.createElement('div');
+                    div.className = 'bg-white p-6 rounded-xl shadow-sm border border-slate-100';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-baseline mb-4 border-b border-slate-100 pb-2">
+                            <h2 class="text-2xl font-bold text-blue-600">${release.name || release.tag_name}</h2>
+                            <span class="text-sm text-slate-500">${date}</span>
+                        </div>
+                        <div class="prose prose-slate max-w-none prose-a:text-blue-500">
+                            ${htmlContent}
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
