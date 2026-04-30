@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使い方ガイド - BloSke | QcDa Project</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="common.css">
+</head>
+<body>
+    <main class="container mx-auto p-6 max-w-3xl">
+        <h1 class="text-3xl font-bold text-center text-slate-800 mb-10">使い方ガイド</h1>
+
+        <div class="space-y-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xl">1</div>
+                    <h2 class="text-xl font-bold text-slate-800">プロジェクトの作成と保存</h2>
+                </div>
+                <p class="text-slate-600 leading-relaxed pl-14">
+                    ログイン後、「プロジェクト一覧」画面から「新規作成」をクリックしてプロジェクト名を入力します。<br>
+                    編集画面の「保存」ボタンを押すことで、クラウド（Firestore）に安全にデータが保存され、他の端末からでもログインすれば続きから編集できます。未ログイン時はブラウザに一時保存されます。
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xl">2</div>
+                    <h2 class="text-xl font-bold text-slate-800">ブロックの追加と編集</h2>
+                </div>
+                <p class="text-slate-600 leading-relaxed pl-14">
+                    編集画面上部の「ブロック追加」ボタンから、イベント名や開始・終了時間、色を指定してタイムテーブルにブロックを配置します。<br>
+                    作成したブロックを削除したり内容を変更したい場合は、「編集モード」ボタンをオンにしてください。
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-xl">3</div>
+                    <h2 class="text-xl font-bold text-slate-800">画像として出力</h2>
+                </div>
+                <p class="text-slate-600 leading-relaxed pl-14">
+                    完成したタイムテーブルは、ツールバーの「画像出力」アイコン（ダウンロードマーク）をクリックすることで、PNG画像として端末に保存できます。SNSでのシェアや資料への添付に便利です。
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-12 text-center">
+            <button onclick="window.close()" class="btn btn-secondary px-8">閉じる</button>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initCommonUI } from './common.js';
+        document.addEventListener('DOMContentLoaded', initCommonUI);
+    </script>
+</body>
+</html>
