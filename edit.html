@@ -141,9 +141,9 @@
             // --- Canvas Settings ---
             const CONFIG = {
                 rowHeight: 60,
-                timelineHeight: 40,
+                timelineHeight: 50,
                 pixelsPerMinute: 2, // 1分あたりのピクセル幅
-                paddingX: 50,
+                paddingX: 60,
                 paddingY: 20
             };
 
@@ -249,14 +249,55 @@
                 });
 
                 let canvasWidth = container.clientWidth;
+                let maxRow = 0;
+
                 if (minTime !== Infinity && maxTime !== -Infinity) {
+                    // 余白（前後30分）
+                    minTime -= 30 * 60 * 1000;
+                    maxTime += 30 * 60 * 1000;
+                    
+                    // キリのいい時間（30分ごと）に切り捨て/切り上げ
+                    let drawMinTime = new Date(minTime);
+                    drawMinTime.setMinutes(drawMinTime.getMinutes() < 30 ? 0 : 30, 0, 0);
+                    minTime = drawMinTime.getTime();
+
+                    let drawMaxTime = new Date(maxTime);
+                    drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
+                    maxTime = drawMaxTime.getTime();
+
                     const durationMins = (maxTime - minTime) / (1000 * 60);
                     const requiredWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
                     if (requiredWidth > canvasWidth) canvasWidth = requiredWidth;
+
+                    // 行数の計算（高さ調整用）
+                    const sortedBlocks = [...projectState.blocks].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+                    const rowsEndTime = [];
+                    sortedBlocks.forEach(b => {
+                        const st = new Date(b.startTime).getTime();
+                        const et = new Date(b.endTime).getTime();
+                        let rowIndex = -1;
+                        for (let i = 0; i < rowsEndTime.length; i++) {
+                            if (rowsEndTime[i] <= st) {
+                                rowIndex = i;
+                                break;
+                            }
+                        }
+                        if (rowIndex === -1) {
+                            rowsEndTime.push(et);
+                        } else {
+                            rowsEndTime[rowIndex] = et;
+                        }
+                    });
+                    maxRow = rowsEndTime.length;
                 }
 
+                // スケジュール内容に合わせてCanvasの高さを拡張
+                let requiredHeight = CONFIG.timelineHeight + CONFIG.paddingY + maxRow * (CONFIG.rowHeight + 10) + 80;
+                let canvasHeight = container.clientHeight - 10;
+                if (requiredHeight > canvasHeight) canvasHeight = requiredHeight;
+
                 canvas.width = canvasWidth;
-                canvas.height = container.clientHeight - 10; // offset
+                canvas.height = canvasHeight;
                 drawCanvas();
             };
             window.addEventListener('resize', resizeCanvas);
@@ -286,15 +327,63 @@
                 // 余白（前後30分）
                 minTime -= 30 * 60 * 1000;
                 maxTime += 30 * 60 * 1000;
+                
+                // 30分単位でキリの良い時刻に切り下げ/切り上げ
+                let drawMinTime = new Date(minTime);
+                drawMinTime.setMinutes(drawMinTime.getMinutes() < 30 ? 0 : 30, 0, 0);
+                minTime = drawMinTime.getTime();
+
+                let drawMaxTime = new Date(maxTime);
+                drawMaxTime.setMinutes(drawMaxTime.getMinutes() <= 30 ? 30 : 60, 0, 0);
+                maxTime = drawMaxTime.getTime();
+
                 currentMinTime = minTime; // ドラッグ計算用に保持
 
-                // 時間軸の描画
+                // --- 時間軸と背景グリッドの描画 ---
                 ctx.beginPath();
                 ctx.moveTo(CONFIG.paddingX, CONFIG.timelineHeight);
                 ctx.lineTo(canvas.width - CONFIG.paddingX, CONFIG.timelineHeight);
                 ctx.strokeStyle = '#CBD5E1';
                 ctx.lineWidth = 2;
                 ctx.stroke();
+
+                // 30分刻みの縦線と時刻
+                const totalMinutes = (maxTime - minTime) / (1000 * 60);
+                for (let m = 0; m <= totalMinutes; m += 30) {
+                    const x = CONFIG.paddingX + m * CONFIG.pixelsPerMinute;
+                    
+                    // 縦線
+                    ctx.beginPath();
+                    ctx.moveTo(x, CONFIG.timelineHeight);
+                    ctx.lineTo(x, canvas.height - 20); // 下部余白まで
+                    ctx.strokeStyle = m % 60 === 0 ? '#E2E8F0' : '#F8FAFC'; // 1時間は少し濃く、30分は薄く
+                    ctx.lineWidth = 1;
+                    if (m % 60 !== 0) {
+                        ctx.setLineDash([4, 4]); // 30分の線は破線
+                    } else {
+                        ctx.setLineDash([]);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]); // 元に戻す
+
+                    // 時刻テキスト
+                    const t = new Date(minTime + m * 60 * 1000);
+                    const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    ctx.fillStyle = '#64748B';
+                    ctx.font = '12px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(timeStr, x, CONFIG.timelineHeight - 10);
+                }
+
+                // --- 両端の日付表示 ---
+                const startDateStr = new Date(minTime).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+                const endDateStr = new Date(maxTime).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+                ctx.fillStyle = '#334155';
+                ctx.font = 'bold 14px Inter';
+                ctx.textAlign = 'left';
+                ctx.fillText(startDateStr, 10, 20);
+                ctx.textAlign = 'right';
+                ctx.fillText(endDateStr, canvas.width - 10, 20);
 
                 // --- ブロックの行（重複）計算 ---
                 // 開始時間順にソートして、重複しない行を探す
@@ -430,15 +519,17 @@
                 const pos = getPointerPos(e);
                 const newStartX = pos.x - dragOffsetX;
                 
-                // X座標から新しい開始時間を計算
-                const offsetMins = (newStartX - CONFIG.paddingX) / CONFIG.pixelsPerMinute;
+                // X座標から新しい開始時間を計算し、5分単位にスナップ
+                let offsetMins = (newStartX - CONFIG.paddingX) / CONFIG.pixelsPerMinute;
+                offsetMins = Math.round(offsetMins / 5) * 5; // 5分の倍数に丸める
+                
                 const newStartTime = new Date(currentMinTime + offsetMins * 60 * 1000);
                 
                 // ブロックの長さ（Duration）を維持して終了時間を計算
                 const duration = new Date(draggedBlock.endTime).getTime() - new Date(draggedBlock.startTime).getTime();
                 const newEndTime = new Date(newStartTime.getTime() + duration);
 
-                // 分単位にスナップさせる
+                // 分単位にスナップさせるため秒以下をリセット
                 newStartTime.setSeconds(0, 0);
                 newEndTime.setSeconds(0, 0);
                 
@@ -538,27 +629,45 @@
                 if(confirm('プロジェクトをリセットします。よろしいですか？')) {
                     projectState.blocks = [];
                     saveLocal();
+                    resizeCanvas();
                 }
             });
 
             document.getElementById('btn-download').addEventListener('click', () => {
-                // 背景を白にして保存
+                // 解像度を2倍にして出力（いい感じの縮尺・高画質化）
                 const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
+                const scale = 2;
+                tempCanvas.width = canvas.width * scale;
+                tempCanvas.height = canvas.height * scale;
                 const tCtx = tempCanvas.getContext('2d');
+                
+                // スケール適用
+                tCtx.scale(scale, scale);
+
+                // 背景を白で塗りつぶし
                 tCtx.fillStyle = '#FFFFFF';
-                tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tCtx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 元のCanvas内容を描画
                 tCtx.drawImage(canvas, 0, 0);
                 
-                // ウォーターマーク
-                tCtx.fillStyle = '#94A3B8';
+                // ロゴ表示用の透過背景ボックス
+                tCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                tCtx.fillRect(canvas.width - 220, canvas.height - 60, 220, 60);
+
+                // アプリ名（ロゴ）とウォーターマーク
+                tCtx.fillStyle = '#3B82F6'; // QcDaブルー
+                tCtx.font = 'bold 24px Inter';
+                tCtx.textAlign = 'right';
+                tCtx.fillText('BloSke', canvas.width - 20, canvas.height - 30);
+                
+                tCtx.fillStyle = '#64748B'; // slate-500
                 tCtx.font = '12px Inter';
-                tCtx.fillText('Created by BloSke', 10, 15);
+                tCtx.fillText('Created by QcDa Project', canvas.width - 20, canvas.height - 10);
 
                 const link = document.createElement('a');
                 link.download = `${projectState.projectName}.png`;
-                link.href = tempCanvas.toDataURL('image/png');
+                link.href = tempCanvas.toDataURL('image/png', 1.0);
                 link.click();
             });
 
