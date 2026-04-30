@@ -124,6 +124,7 @@
         let isDragging = false;
         let draggedBlock = null;
         let dragOffsetX = 0;
+        let dragOffsetY = 0;
         let blockRenderData = []; // 描画時の座標データ { block, x, y, w, h }
         let currentMinTime = 0;
 
@@ -155,6 +156,42 @@
                 drawCanvas();
             };
 
+            const assignRowsIfNeeded = () => {
+                let modified = false;
+                const rowEnds = [];
+                
+                projectState.blocks.forEach(b => {
+                    if (b.row !== undefined) {
+                        const et = new Date(b.endTime).getTime();
+                        if (rowEnds[b.row] === undefined || rowEnds[b.row] < et) {
+                            rowEnds[b.row] = et;
+                        }
+                    }
+                });
+
+                const unassigned = projectState.blocks.filter(b => b.row === undefined).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+                unassigned.forEach(b => {
+                    const st = new Date(b.startTime).getTime();
+                    const et = new Date(b.endTime).getTime();
+                    let rowIndex = -1;
+                    
+                    for (let i = 0; i < rowEnds.length; i++) {
+                        if (rowEnds[i] === undefined || rowEnds[i] <= st) {
+                            rowIndex = i;
+                            break;
+                        }
+                    }
+                    if (rowIndex === -1) {
+                        rowIndex = rowEnds.length;
+                    }
+                    b.row = rowIndex;
+                    rowEnds[rowIndex] = et;
+                    modified = true;
+                });
+                
+                if (modified) saveLocal();
+            };
+
             const loadLocal = () => {
                 const data = localStorage.getItem('bloske_local_project');
                 if (data) {
@@ -163,6 +200,7 @@
                     if (!projectState.id || parsed.id === projectState.id) {
                         projectState = parsed;
                         titleInput.value = projectState.projectName;
+                        assignRowsIfNeeded();
                     }
                 }
             };
@@ -177,6 +215,7 @@
                         if (docSnap.exists() && docSnap.data().userId === user.uid) {
                             projectState = { id: docSnap.id, ...docSnap.data() };
                             titleInput.value = projectState.projectName;
+                            assignRowsIfNeeded();
                             drawCanvas();
                         } else {
                             alert("データが見つからないか、アクセス権がありません。");
@@ -269,26 +308,10 @@
                     const requiredWidth = durationMins * CONFIG.pixelsPerMinute + (CONFIG.paddingX * 2);
                     if (requiredWidth > canvasWidth) canvasWidth = requiredWidth;
 
-                    // 行数の計算（高さ調整用）
-                    const sortedBlocks = [...projectState.blocks].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-                    const rowsEndTime = [];
-                    sortedBlocks.forEach(b => {
-                        const st = new Date(b.startTime).getTime();
-                        const et = new Date(b.endTime).getTime();
-                        let rowIndex = -1;
-                        for (let i = 0; i < rowsEndTime.length; i++) {
-                            if (rowsEndTime[i] <= st) {
-                                rowIndex = i;
-                                break;
-                            }
-                        }
-                        if (rowIndex === -1) {
-                            rowsEndTime.push(et);
-                        } else {
-                            rowsEndTime[rowIndex] = et;
-                        }
-                    });
-                    maxRow = rowsEndTime.length;
+                    // 行数の計算（高さ調整用：ユーザーが指定したrowの最大値を取得）
+                    if (projectState.blocks.length > 0) {
+                        maxRow = Math.max(...projectState.blocks.map(b => b.row || 0)) + 1;
+                    }
                 }
 
                 // スケジュール内容に合わせてCanvasの高さを拡張
@@ -385,34 +408,6 @@
                 ctx.textAlign = 'right';
                 ctx.fillText(endDateStr, canvas.width - 10, 20);
 
-                // --- ブロックの行（重複）計算 ---
-                // 開始時間順にソートして、重複しない行を探す
-                const sortedBlocks = [...projectState.blocks].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-                const rowsEndTime = [];
-                const blockRows = new Map();
-
-                sortedBlocks.forEach(b => {
-                    const st = new Date(b.startTime).getTime();
-                    const et = new Date(b.endTime).getTime();
-                    let rowIndex = -1;
-                    
-                    // 既存の行で空きがあるか探す
-                    for (let i = 0; i < rowsEndTime.length; i++) {
-                        if (rowsEndTime[i] <= st) {
-                            rowIndex = i;
-                            break;
-                        }
-                    }
-                    // 空きがなければ新しい行を追加
-                    if (rowIndex === -1) {
-                        rowIndex = rowsEndTime.length;
-                        rowsEndTime.push(et);
-                    } else {
-                        rowsEndTime[rowIndex] = et;
-                    }
-                    blockRows.set(b.id, rowIndex);
-                });
-
                 // --- ブロックの描画 ---
                 projectState.blocks.forEach(b => {
                     const st = new Date(b.startTime).getTime();
@@ -422,7 +417,7 @@
                     const endX = CONFIG.paddingX + ((et - minTime) / (1000 * 60)) * CONFIG.pixelsPerMinute;
                     const width = endX - startX;
                     
-                    const row = blockRows.get(b.id);
+                    const row = b.row || 0;
                     const y = CONFIG.timelineHeight + CONFIG.paddingY + (row * (CONFIG.rowHeight + 10));
 
                     // 当たり判定用データを記録
@@ -505,6 +500,7 @@
                             isDragging = true;
                             draggedBlock = block;
                             dragOffsetX = pos.x - x;
+                            dragOffsetY = pos.y - y;
                             if (e.touches) e.preventDefault(); // スマホのスクロール防止
                             return;
                         }
@@ -518,6 +514,7 @@
 
                 const pos = getPointerPos(e);
                 const newStartX = pos.x - dragOffsetX;
+                const newY = pos.y - dragOffsetY;
                 
                 // X座標から新しい開始時間を計算し、5分単位にスナップ
                 let offsetMins = (newStartX - CONFIG.paddingX) / CONFIG.pixelsPerMinute;
@@ -535,6 +532,10 @@
                 
                 draggedBlock.startTime = newStartTime.toISOString();
                 draggedBlock.endTime = newEndTime.toISOString();
+
+                // Y座標から新しい行(row)を計算して更新
+                let newRow = Math.round((newY - (CONFIG.timelineHeight + CONFIG.paddingY)) / (CONFIG.rowHeight + 10));
+                draggedBlock.row = Math.max(0, newRow);
 
                 // 描画更新
                 drawCanvas();
@@ -577,9 +578,20 @@
                     // 編集時のデータ流し込み
                     document.getElementById('block-id').value = block.id;
                     document.getElementById('block-title').value = block.title;
-                    document.getElementById('block-start').value = new Date(block.startTime).toISOString().slice(0, 16);
-                    document.getElementById('block-end').value = new Date(block.endTime).toISOString().slice(0, 16);
-                    document.querySelector(`input[name="bColor"][value="${block.color}"]`).checked = true;
+                    
+                    // JSTなどのローカルタイムゾーンを考慮してdatetime-local用の文字列を生成
+                    const toLocalInputFormat = (isoString) => {
+                        const date = new Date(isoString);
+                        date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+                        return date.toISOString().slice(0, 16);
+                    };
+
+                    document.getElementById('block-start').value = toLocalInputFormat(block.startTime);
+                    document.getElementById('block-end').value = toLocalInputFormat(block.endTime);
+                    
+                    const colorInput = document.querySelector(`input[name="bColor"][value="${block.color}"]`);
+                    if (colorInput) colorInput.checked = true;
+                    
                     document.getElementById('block-modal-title').textContent = 'ブロックの編集';
                 } else {
                     // 新規追加時の初期値
@@ -615,11 +627,14 @@
 
                 const existingIdx = projectState.blocks.findIndex(b => b.id === id);
                 if (existingIdx >= 0) {
+                    newBlock.row = projectState.blocks[existingIdx].row; // 既存の行を維持
                     projectState.blocks[existingIdx] = newBlock;
                 } else {
+                    // 新規追加時は行を未定にしておき、assignRowsIfNeededで被らない行を自動割り当てする
                     projectState.blocks.push(newBlock);
                 }
 
+                assignRowsIfNeeded(); // rowを持たない新規ブロックにrowを割り当て
                 modal.classList.remove('show');
                 saveLocal();
                 resizeCanvas(); // 追加で領域が広がる可能性考慮
